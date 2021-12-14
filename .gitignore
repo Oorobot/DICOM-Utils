@@ -1,19 +1,13 @@
 # 文件夹
-/logs
-/data
-/images
-/datasets
-/results
-/checkpoints
-/source/pix2pixHD/checkpoints
-
 /__pycache__
-/source/__pycache__
-/source/*/__pycache__
-/source/*/*/__pycache__
-/source/pix2pixHD/datasets
-/source/pix2pixHD/results
+/LUNA16
+/NewPulmonaryNodule
+/PET-CT
+/ThreePhaseBone
+/process
 
 # 文件
-_test_.py
+*.dcm
 *.txt
+*.csv
+
