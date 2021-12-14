@@ -1,0 +1,19 @@
+# 文件夹
+/logs
+/data
+/images
+/datasets
+/results
+/checkpoints
+/source/pix2pixHD/checkpoints
+
+/__pycache__
+/source/__pycache__
+/source/*/__pycache__
+/source/*/*/__pycache__
+/source/pix2pixHD/datasets
+/source/pix2pixHD/results
+
+# 文件
+_test_.py
+*.txt
