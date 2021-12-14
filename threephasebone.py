@@ -5,87 +5,92 @@ import SimpleITK as sitk
 import pandas as pd
 import cv2
 
+# 处理骨三相
+def img_process(filename: str, clip_type: str, classes: int, result_path: str):
 
-def load_and_save(csv, root_path):
+    # 读取图像(灰度图)
+    img = cv2.imread(filename, cv2.IMREAD_GRAYSCALE)
+    # 共裁剪出16张图象, blood flow phase 12张, blood pool phase 4张
+    flow_phase = np.zeros((12, 256, 256))
+    pool_phase = np.zeros((4, 256, 256))
+    cliped_img = []
 
-    # csv [ 0 -> bodypart; 1 -> type; 2 -> filename; 3 -> label]
-    # type: 3 4, 4 4, 0 0
-    info = np.loadtxt(csv, dtype=str, delimiter=",", skiprows=1)
-    dirs = os.listdir(root_path)
+    #
+    if clip_type == "3 4":
+        x = 130
+        y = 77
+        pic_width = 160
+        pic_height = 120
+        displacement_x = 406
+        displacement_y = 169
+    elif clip_type == "4 4":
+        x = 155
+        y = 86 + 125
+        pic_width = 110
+        pic_height = 86
+        displacement_x = 405
+        displacement_y = 125
 
-    for i in range(len(info)):
-        # 保存路径
-        result_path = info[i, 0] + "/" + dirs[i]
-        # 读取的文件路径
-        file_path = os.path.join(root_path, dirs[i], info[i, 2])
-        # 数据标签
-        label_ = 1 if info[i, 3] == "1" else 0
+    for i in range(3):
+        for j in range(4):
+            an_img = img[
+                y + i * displacement_y : y + pic_height + i * displacement_y,
+                x + j * displacement_x : x + pic_width + j * displacement_x,
+            ]
+            # resize -> 256x256
+            cliped_img.append(an_img)
+            an_img = cv2.resize(an_img, (256, 256))
+            flow_phase[i * 4 + j] = an_img
 
-        # 对图像处理, 按照灰度图进行读取
-        # image = cv2.imread(file_path, cv2.IMREAD_COLOR)
-        image = cv2.imread(file_path, cv2.IMREAD_GRAYSCALE)
-        flow_phase = np.zeros((12, 256, 256))
-        pool_phase = np.zeros((4, 256, 256))
-        # 保存裁剪出来的图片
-        temp_cliped = []
-        # 开始裁剪
-        if info[i, 1] == "3 4":
-            x = 130
-            y = 77
-            pic_width = 160
-            pic_height = 120
-            displacement_x = 406
-            displacement_y = 169
-        elif info[i, 1] == "4 4":
-            x = 155
-            y = 86 + 125
-            pic_width = 110
-            pic_height = 86
-            displacement_x = 405
-            displacement_y = 125
-        else:
-            continue
+    x = 294
+    y = 602
+    pic_width = 240
+    pic_height = 180
+    displacement_x = 813
+    displacement_y = 253
 
-        for i in range(3):
-            for j in range(4):
-                per_image = image[
-                    y + i * displacement_y : y + pic_height + i * displacement_y,
-                    x + j * displacement_x : x + pic_width + j * displacement_x,
-                ]
-                # resize -> 256x256
-                temp_cliped.append(per_image)
-                per_image = cv2.resize(per_image, (256, 256))
-                flow_phase[i * 4 + j] = per_image
+    for i in range(2):
+        for j in range(2):
+            an_img = img[
+                y + i * displacement_y : y + pic_height + i * displacement_y,
+                x + j * displacement_x : x + pic_width + j * displacement_x,
+            ]
+            # resize -> 256x256
+            cliped_img.append(an_img)
+            an_img = cv2.resize(an_img, (256, 256))
+            pool_phase[i * 2 + j] = an_img
 
-        x = 294
-        y = 602
-        pic_width = 240
-        pic_height = 180
-        displacement_x = 813
-        displacement_y = 253
+    # 保存文件和裁剪的图片
+    for i in range(16):
+        plt.subplot(4, 4, i + 1)
+        plt.imshow(cliped_img[i], plt.cm.gray)
+        plt.axis("off")
+    plt.savefig(result_path + ".png")
+    np.savez(result_path + ".npz", flow=flow_phase, pool=pool_phase, label=classes)
 
-        for i in range(2):
-            for j in range(2):
-                per_image = image[
-                    y + i * displacement_y : y + pic_height + i * displacement_y,
-                    x + j * displacement_x : x + pic_width + j * displacement_x,
-                ]
-                # resize -> 256x256
-                temp_cliped.append(per_image)
-                per_image = cv2.resize(per_image, (256, 256))
-                pool_phase[i * 2 + j] = per_image
 
-        # 保存文件和裁剪的图片
-        for i in range(16):
-            plt.subplot(4, 4, i + 1)
-            plt.imshow(temp_cliped[i], plt.cm.gray)
-            plt.axis("off")
-        plt.savefig(result_path + ".png")
-        np.savez(result_path + ".npz", flow=flow_phase, pool=pool_phase, label=label_)
+def dcm_process(filename: str):
+    img = sitk.ReadImage(filename)
+    img_array = sitk.GetArrayFromImage(img)
+    return img_array
 
 
 if __name__ == "__main__":
-    # load_and_save("ThreePhaseBone/total.csv", "ThreePhaseBone/2015-2021")
-    img = sitk.ReadImage("ImageFileName.dcm")
-    img__ = sitk.GetArrayFromImage(img)
+
+    # csv [ 0 -> bodypart; 1 -> type; 2 -> filename; 3 -> label]
+    # type: 3 4, 4 4, 0 0
+
+    files_info = np.loadtxt(
+        "ThreePhaseBone/total.csv", dtype=str, delimiter=",", skiprows=1
+    )
+    dirs = os.listdir("ThreePhaseBone/2015-2021")
+
+    for info, d in zip(files_info, dirs):
+
+        filename = os.path.join("ThreePhaseBone/2015-2021", d, info[2])
+        classes = 1 if info[3] == "1" else 0
+        result_path = info[0] + "/" + d
+
+        img_process(filename, info[1], classes, result_path)
+
     print(0)

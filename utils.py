@@ -67,14 +67,14 @@ def clip(
 
 
 def files_split(files: List[str], ratio: float):
-    """split a set of files into two set of files
+    """将一组文件划分为两组文件, 该两组文件数量之比为 ratio.
 
     Args:
-        files (List[str]): a set of files
-        ratio (float): number_{selected_files} / number_{files} = ratio
+        files (List[str]): 需要划分的一组文件
+        ratio (float): 划分的比例
 
     Returns:
-        selected_files, left_files (List[str]): two set of files
+        划分后的两组文件
     """
     num = int(ratio * len(files))
     selected_files = np.random.choice(files, num, False)
@@ -83,11 +83,11 @@ def files_split(files: List[str], ratio: float):
 
 
 def write_txt(files: List[str], txt: str):
-    """write a list of files' relative path to a txt file
+    """将一组文件写入 txt 文件中
 
     Args:
-        files (List[str]): a list of file's relative path
-        txt (str): the file name of a txt file
+        files (List[str]): 需要写入txt的一组文件
+        txt (str): txt的文件名
     """
     file = open(txt, "w")
     for line in files:

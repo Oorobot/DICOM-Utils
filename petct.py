@@ -139,6 +139,10 @@ def only_center_contour(mask: np.ndarray, center: Tuple[float, float]):
     return mask
 
 
+def data_valid():
+    pass
+
+
 """ series images的顺序是从肺部上面到下面，.nii.gz的顺序恰好相反，从下面到上面
     所以，读取完 .nii.gz 需要将图像序列进行 reverse 
 """
