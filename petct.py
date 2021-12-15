@@ -95,7 +95,9 @@ def compute_SUVbw_in_GE(pixel_value: np.ndarray, file: str) -> np.ndarray:
     return SUVbw
 
 
-def resample(img: sitk.Image, tar_img: sitk.Image, is_label: bool) -> sitk.Image:
+def resample(
+    img: sitk.Image, tar_img: sitk.Image, is_label: bool = False
+) -> sitk.Image:
 
     resamlper = sitk.ResampleImageFilter()
     resamlper.SetReferenceImage(tar_img)
@@ -108,12 +110,40 @@ def resample(img: sitk.Image, tar_img: sitk.Image, is_label: bool) -> sitk.Image
     return resamlper.Execute(img)
 
 
+def get_resampled_SUVbw_from_petct(PET_files: List[str], CT: sitk.Image) -> np.ndarray:
+    """对于同一个患者的PETCT, PET将根据CT进行重采样到跟CT一样, 并计算PET的SUVbw.
+
+    Args:
+        PET_files (List[str]): 病患的一系列PET切片文件
+        CT (sitk.Image): 病患的一系列CT, sitk.Image
+
+    Returns:
+        np.ndarray: 与CT一样的三维空间分辨率的suvbw
+    """
+
+    pet = read_serises_images(PET_files)
+    pet_array = sitk.GetArrayFromImage(pet)
+
+    # 计算每张PET slice的SUVbw
+    suvbw = np.zeros_like(pet_array, dtype=np.float32)
+    for i in range(pet_array.shape[0]):
+        suvbw[i] = compute_SUVbw_in_GE(pet_array[i], PET_files[i])
+
+    # 将suvbw变为图像, 并根据CT进行重采样.
+    suvbw_img = sitk.GetImageFromArray(suvbw)
+    print(suvbw_img.GetSize())
+    suvbw_img.SetOrigin(pet.GetOrigin())
+    suvbw_img.SetSpacing(pet.GetSpacing())
+    suvbw_img.SetDirection(pet.GetDirection())
+    resampled_suvbw_img = resample(suvbw_img, CT)
+
+    return sitk.GetArrayFromImage(resampled_suvbw_img)
+
+
 def reg_data_valid(filelist: List[str]):
-    suvmax_max = 0
-    suvmin_min = 50
+    suvmax_max = 0.0
+    suvmin_min = 50.0
     abnormal_file = []
-    txt = open("data_valid.txt", "w")
-    sys.stdout = txt
     for file in filelist:
         print("file name: ", file)
         data = np.load(file)
@@ -144,4 +174,4 @@ def reg_data_valid(filelist: List[str]):
     print("the max of suv max: ", suvmax_max)
     print("the min of suv min: ", suvmin_min)
     print("abnormal files: ", abnormal_file)
-    txt.close()
+

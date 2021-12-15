@@ -5,33 +5,47 @@ from utils import *
     所以, 需要将.nii.gz图像序列进行 reverse 
 """
 
+
 # 常量
-ALL_MASKS = glob("NewPulmonaryNodule/*/*.nii.gz")
-NEW2OLD = np.loadtxt(
-    fname="new2lod.csv", dtype=np.uint32, delimiter=",", skiprows=1, usecols=1
-)
+SEG_LABEL_FILES = glob("NewPulmonaryNodule/*/*.nii.gz")
 LUNG_BASE_PATH = "PET-CT"
 LUNG_SLICE = np.loadtxt(
     fname="lung_slice.csv", dtype=np.uint32, delimiter=",", usecols=(1, 2)
 )
 
+# # 将分割标签文件移动到 PET-CT 对应的文件夹中, 并重命名为文件夹名
+# new2lod = np.loadtxt(
+#     fname="new2lod.csv", dtype=np.uint32, delimiter=",", skiprows=1, usecols=1
+# )
+# for file in SEG_LABEL_FILES:
+#     new_dir = file.split("\\")[1]
+#     old_dir = new2lod[int(new_dir) - 1]
+#     file_name = str(old_dir).zfill(3) + ".nii.gz"
+#     dst = os.path.join(LUNG_BASE_PATH, str(old_dir).zfill(3), file_name)
+#     print("scr: ", file, ", dst: ", dst)
+#     rename(file, dst)
 
-for mask_file in ALL_MASKS:
 
-    print("now start process file: ", mask_file)
+# reg 数据处理
+for seg_file in SEG_LABEL_FILES:
 
-    new_dir = mask_file.split("\\")[1]
-    old_dir = NEW2OLD[int(new_dir) - 1]
+    print("now start process file: ", seg_file)
 
-    slice_start, slice_end = LUNG_SLICE[old_dir - 1]
+    seg_file_dir = os.path.dirname(seg_file)
+    idx = int(seg_file_dir.split("\\"))
 
-    series_ct_files = glob(os.path.join(LUNG_BASE_PATH, str(old_dir).zfill(3), "CT*"))
-    series_pet_files = glob(os.path.join(LUNG_BASE_PATH, str(old_dir).zfill(3), "PET*"))
+    # new_dir = seg_file.split("\\")[1]
+    # old_dir = NEW2OLD[int(new_dir) - 1]
+
+    slice_start, slice_end = LUNG_SLICE[idx - 1]
+
+    series_ct_files = glob(os.path.join(seg_file_dir, "CT*"))
+    series_pet_files = glob(os.path.join(seg_file_dir, "PET*"))
 
     # 读取CT、PET、mask file
     series_ct = read_serises_images(series_ct_files)
     series_pet = read_serises_images(series_pet_files)
-    segmentation = sitk.ReadImage(mask_file)
+    segmentation = sitk.ReadImage(seg_file)
 
     ct_array = sitk.GetArrayFromImage(series_ct)
     pet_array = sitk.GetArrayFromImage(series_pet)
@@ -39,13 +53,6 @@ for mask_file in ALL_MASKS:
 
     # 计算肺部切片长度
     slice_length = slice_end - slice_start + 1
-
-    if slice_length != seg_array.shape[0]:
-        print(
-            "------the ct'shape is not matched to seg'shape----- the dir is: NewPulmonaryNodule/%s"
-            % (new_dir),
-        )
-        continue
 
     # 取出CT肺部切片, 文件名由000开始编号，故如此切片
     lung_ct_files = series_ct_files[slice_start : slice_end + 1]
@@ -101,7 +108,7 @@ for mask_file in ALL_MASKS:
             cur_suvbw = lung_suvbw[i]
             print(
                 "%s_%s lung slice file is processing!"
-                % (str(old_dir).zfill(3), cur_file_name)
+                % (str(idx).zfill(3), cur_file_name)
             )
 
             # 获取掩码后的CT图像
@@ -111,7 +118,7 @@ for mask_file in ALL_MASKS:
                 [masked_CT_1, masked_CT_2],
                 ["mask 1", "mask 2"],
                 ["bone", "bone"],
-                "process/img/%s_%s_mask.png" % (str(old_dir).zfill(3), cur_file_name),
+                "process/img/%s_%s_mask.png" % (str(idx).zfill(3), cur_file_name),
             )
 
             # 由于每张图片可能存在多个病灶，所以需要定位出每个病灶并计算出每个病灶的suv max，min，mean
@@ -156,7 +163,6 @@ for mask_file in ALL_MASKS:
                     print("there is one need to resize to 32x32!!")
 
                 # seg 仅保留一个中心的病灶
-
                 cliped_seg_only_one = only_center_contour(cliped_seg, (15.5, 15.5))
 
                 # 保存文件
@@ -165,11 +171,11 @@ for mask_file in ALL_MASKS:
                     ["img", "seg", "seg_one"],
                     ["bone", "gray", "gray"],
                     "process/img/%s_%s_%s_cliped.png"
-                    % (str(old_dir).zfill(3), cur_file_name, str(idx).zfill(2),),
+                    % (str(idx).zfill(3), cur_file_name, str(idx).zfill(2),),
                 )
                 np.savez(
                     "process/reg/%s_%s_%s.npz"
-                    % (str(old_dir).zfill(3), cur_file_name, str(idx).zfill(2),),
+                    % (str(idx).zfill(3), cur_file_name, str(idx).zfill(2),),
                     hu=cliped_image,
                     seg=cliped_seg_only_one,
                     suvmax=suv_max,
