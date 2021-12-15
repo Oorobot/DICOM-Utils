@@ -131,7 +131,6 @@ def get_resampled_SUVbw_from_petct(PET_files: List[str], CT: sitk.Image) -> np.n
 
     # 将suvbw变为图像, 并根据CT进行重采样.
     suvbw_img = sitk.GetImageFromArray(suvbw)
-    print(suvbw_img.GetSize())
     suvbw_img.SetOrigin(pet.GetOrigin())
     suvbw_img.SetSpacing(pet.GetSpacing())
     suvbw_img.SetDirection(pet.GetDirection())
