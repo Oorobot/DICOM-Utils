@@ -55,8 +55,110 @@ def compute_hounsfield_unit(pixel_value: np.ndarray, file: str) -> np.ndarray:
     return hounsfield_unit
 
 
+def compute_SUVbw(pixel_value: np.ndarray, file: str) -> np.ndarray:
+    """如果特定的 DICOM 文件出现某个属性缺失或为空或为零, SUV将无法计算. GE Medical 不适用该方法."""
+    image = pydicom.dcmread(file)
+
+    if (
+        "ATTN" in image.CorrectedImage
+        and "DECY" in image.CorrectedImage
+        and image.DecayCorrection == "START"
+    ):
+        if image.Units == "BQML":
+            half_life = float(
+                image.RadiopharmaceuticalInformationSequence[0].RadionuclideHalfLife
+            )
+            if (
+                image.SeriesDate <= image.AcquisitionDate
+                and image.SeriesTime <= image.AcquisitionTime
+            ):
+                scan_datetime = image.SeriesDate + image.SeriesTime
+            if (
+                "RadiopharmaceuticalStartDateTime"
+                in image.RadiopharmaceuticalInformationSequence[0]
+            ):
+                start_datetime = image.RadiopharmaceuticalInformationSequence[
+                    0
+                ].RadiopharmaceuticalStartDateTime
+            else:
+                start_datetime = (
+                    image.SeriesDate
+                    + image.RadiopharmaceuticalInformationSequence[
+                        0
+                    ].RadiopharmaceuticalStartTime
+                )
+
+            decay_time = (
+                to_datetime(scan_datetime) - to_datetime(start_datetime)
+            ).total_seconds()
+
+            injected_dose = float(
+                image.RadiopharmaceuticalInformationSequence[0].RadionuclideTotalDose
+            )
+            decayed_dose = injected_dose * (2 ** (-decay_time / half_life))
+            SUVbwScaleFactor = image.PatientWeight * 1000 / decayed_dose
+        elif image.Units == "CNTS":
+            SUVbwScaleFactor = image.get_item((0x7053, 0x1000))
+        elif image.Units == "GML":
+            SUVbwScaleFactor = 1.0
+    SUVbw = (
+        pixel_value * float(image.RescaleSlope) + float(image.RescaleIntercept)
+    ) * SUVbwScaleFactor
+    return SUVbw
+
+
+def compute_SUV_in_GE(
+    pixel_value: np.ndarray, file: str
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """根据 PET tag 信息, 计算 PET 每个像素值的 SUVbw, SUVbsa, SUVlbm. 仅用于 GE medical."""
+    image = pydicom.dcmread(file)
+
+    bw = image.PatientWeight * 1000  # g
+    bsa = (
+        (image.PatientWeight ** 0.425)
+        * ((image.PatientSize * 100) ** 0.725)
+        * 0.007184
+        * 10000
+    )
+    if image.PatientSex == "M":
+        lbm = 1.10 * image.PatientWeight - 120 * (
+            (image.PatientWeight / (image.PatientSize * 100)) ** 2
+        )
+    elif image.PatientSex == "F":
+        lbm = 1.07 * image.PatientWeight - 148 * (
+            (image.PatientWeight / (image.PatientSize * 100)) ** 2
+        )
+
+    decay_time = (
+        to_datetime(image.SeriesDate + image.SeriesTime)
+        - to_datetime(
+            image.SeriesDate
+            + image.RadiopharmaceuticalInformationSequence[
+                0
+            ].RadiopharmaceuticalStartTime
+        )
+    ).total_seconds()
+
+    actual_activity = float(
+        image.RadiopharmaceuticalInformationSequence[0].RadionuclideTotalDose
+    ) * (
+        2
+        ** (
+            -(decay_time)
+            / float(
+                image.RadiopharmaceuticalInformationSequence[0].RadionuclideHalfLife
+            )
+        )
+    )
+
+    SUVbw = pixel_value * bw / actual_activity  # g/ml
+    SUVbsa = pixel_value * bsa / actual_activity  # cm2/ml
+    SUVlbm = pixel_value * lbm * 1000 / actual_activity  # g/ml
+    return SUVbw, SUVbsa, SUVlbm
+
+
 def compute_SUVbw_in_GE(pixel_value: np.ndarray, file: str) -> np.ndarray:
-    """根据 PET tag 信息, 计算 PET 每个像素值得 SUVbw. 仅用于 GE medical.
+    """根据 PET tag 信息, 计算 PET 每个像素值的 SUVbw. 仅用于 GE medical.
     
     Args:
         pixel_value (np.ndarray): PET 的像素值矩阵

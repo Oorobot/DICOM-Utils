@@ -106,6 +106,7 @@ for seg_file in SEG_LABEL_FILES:
                     break
                 indices_max = np.max(contour, axis=0)
                 indices_min = np.min(contour, axis=0)
+
                 # 计算每个病灶的 suv max, suv mean, suv min
                 masked_suv = np.ma.masked_where(cur_seg == 0, cur_suvbw)
                 cliped_masked_suv = masked_suv[
