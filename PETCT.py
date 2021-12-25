@@ -10,7 +10,7 @@ import pydicom
 import SimpleITK as sitk
 
 
-def read_serises_images(files: List[str]) -> sitk.Image:
+def read_serises_image(files: List[str]) -> sitk.Image:
     reader = sitk.ImageSeriesReader()
     reader.SetFileNames(files)
     images = reader.Execute()
@@ -50,8 +50,7 @@ def compute_hounsfield_unit(pixel_value: np.ndarray, file: str) -> np.ndarray:
         hounsfield_unit = pixel_value * float(image.RescaleSlope) + float(
             image.RescaleIntercept
         )
-    # Hounsfield Unit between -1000 and 1000
-    np.clip(hounsfield_unit, -1000, 1000, out=hounsfield_unit)
+
     return hounsfield_unit
 
 
@@ -192,8 +191,6 @@ def compute_SUVbw_in_GE(pixel_value: np.ndarray, file: str) -> np.ndarray:
 
     SUVbw = pixel_value * bw / actual_activity  # g/ml
 
-    # SUVbw between 0 and 50
-    np.clip(SUVbw, 0, 50, out=SUVbw)
     return SUVbw
 
 
@@ -212,7 +209,9 @@ def resample(
     return resamlper.Execute(img)
 
 
-def get_resampled_SUVbw_from_petct(PET_files: List[str], CT: sitk.Image) -> np.ndarray:
+def get_resampled_SUVbw_from_PETCT(
+    PET_files: List[str], CT_image: sitk.Image
+) -> np.ndarray:
     """对于同一个患者的PETCT, PET将根据CT进行重采样到跟CT一样, 并计算PET的SUVbw.
 
     Args:
@@ -223,56 +222,57 @@ def get_resampled_SUVbw_from_petct(PET_files: List[str], CT: sitk.Image) -> np.n
         np.ndarray: 与CT一样的三维空间分辨率的suvbw
     """
 
-    pet = read_serises_images(PET_files)
-    pet_array = sitk.GetArrayFromImage(pet)
+    PET_image = read_serises_image(PET_files)
+    PET_array = sitk.GetArrayFromImage(PET_image)
 
     # 计算每张PET slice的SUVbw
-    suvbw = np.zeros_like(pet_array, dtype=np.float32)
-    for i in range(pet_array.shape[0]):
-        suvbw[i] = compute_SUVbw_in_GE(pet_array[i], PET_files[i])
+    SUVbw = np.zeros_like(PET_array, dtype=np.float32)
+    for i in range(PET_array.shape[0]):
+        SUVbw[i] = compute_SUVbw_in_GE(PET_array[i], PET_files[i])
 
     # 将suvbw变为图像, 并根据CT进行重采样.
-    suvbw_img = sitk.GetImageFromArray(suvbw)
-    suvbw_img.SetOrigin(pet.GetOrigin())
-    suvbw_img.SetSpacing(pet.GetSpacing())
-    suvbw_img.SetDirection(pet.GetDirection())
-    resampled_suvbw_img = resample(suvbw_img, CT)
+    SUVbw_image = sitk.GetImageFromArray(SUVbw)
+    SUVbw_image.SetOrigin(PET_image.GetOrigin())
+    SUVbw_image.SetSpacing(PET_image.GetSpacing())
+    SUVbw_image.SetDirection(PET_image.GetDirection())
+    resampled_SUVbw_image = resample(SUVbw_image, CT_image)
 
-    return sitk.GetArrayFromImage(resampled_suvbw_img)
+    return sitk.GetArrayFromImage(resampled_SUVbw_image)
 
 
 def reg_data_valid(filelist: List[str]):
-    suvmax_max = 0.0
-    suvmin_min = 50.0
-    abnormal_file = []
+    max = 0.0
+    min = np.inf
+    abnormal_files = []
     for file in filelist:
         print("file name: ", file)
         data = np.load(file)
-        seg = data["seg"]
-        hu = data["hu"]
-        suvmax = data["suvmax"]
-        suvmin = data["suvmin"]
-        suvmean = data["suvmean"]
+        hu = data["HU"]
+        seg = data["segmentation"]
+        suvmax = data["max"]
+        suvmean = data["mean"]
+        suvmin = data["min"]
 
-        contours, h = cv2.findContours(
+        contours, _ = cv2.findContours(
             seg.astype(np.uint8), cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE
         )
         print("the number of segmentation: ", len(contours))
         if len(contours) > 1:
-            abnormal_file.append(file)
-        print(
-            "the existence of nan and inf (Ture or False) : ",
-            np.isnan(hu).any(),
-            np.isinf(hu).any(),
-            np.isnan(seg).any(),
-            np.isinf(seg).any(),
-        )
-        print("suv max, min, mean: %f, %f, %f" % (suvmax, suvmin, suvmean))
-        if suvmax > suvmax_max:
-            suvmax_max = suvmax
-        if suvmin < suvmin_min:
-            suvmin_min = suvmin
-    print("the max of suv max: ", suvmax_max)
-    print("the min of suv min: ", suvmin_min)
-    print("abnormal files: ", abnormal_file)
+            abnormal_files.append(file)
+
+        if (
+            np.isnan(hu).any()
+            and np.isinf(hu).any()
+            and np.isnan(seg).any()
+            and np.isinf(seg).any()
+        ):
+            print("--- THIS FILE HAS INF OR NAN ---")
+        print("max: %f, min: %f, mean: %f." % (suvmax, suvmin, suvmean))
+        if suvmax > max:
+            max = suvmax
+        if suvmin < min:
+            min = suvmin
+    print("the max of SUVbw max: ", max)
+    print("the min of SUVbw min: ", min)
+    print("abnormal files: ", abnormal_files)
 

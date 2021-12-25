@@ -4,7 +4,7 @@
 /NewPulmonaryNodule
 /PET-CT
 /ThreePhaseBone
-/process
+/ProcessedData
 
 # 文件
 *.dcm

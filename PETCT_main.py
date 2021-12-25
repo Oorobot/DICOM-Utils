@@ -4,7 +4,7 @@ from utils import *
 """ series images的顺序是从肺部上面到下面, .nii.gz的顺序恰好相反，从下面到上面."""
 
 # 常量
-SEG_LABEL_FILES = glob("PET-CT/*/*.nii.gz")
+SEGMENTATION_FILES = glob("PET-CT/*/*.nii.gz")
 LUNG_SLICE = np.loadtxt(
     fname="lung_slice.csv", dtype=np.uint32, delimiter=",", usecols=(1, 2)
 )
@@ -23,80 +23,90 @@ LUNG_SLICE = np.loadtxt(
 
 
 # reg 数据处理
-for seg_file in SEG_LABEL_FILES:
-    print("now start process file: ", seg_file)
+for segmentation_file in SEGMENTATION_FILES:
+    print("now start process file: ", segmentation_file)
 
     # 获取当前文件夹和上一级文件夹名
-    seg_file_dir = os.path.dirname(seg_file)
-    dir_name = seg_file_dir.split("\\")[-1]
+    segmentation_file_dir = os.path.dirname(segmentation_file)
+    dir_name = segmentation_file_dir.split("\\")[-1]
 
     # 肺部切片
     slice_start, slice_end = LUNG_SLICE[int(dir_name) - 1]
     # 计算肺部切片长度
     slice_length = slice_end - slice_start + 1
 
-    # 获取同一患者的PETCT文件
-    series_ct_files = glob(os.path.join(seg_file_dir, "CT*"))
-    series_pet_files = glob(os.path.join(seg_file_dir, "PET*"))
-
     # 读取分割标签文件, 并翻转, 因为顺序与PETCT相反
-    seg_array = sitk.GetArrayFromImage(sitk.ReadImage(seg_file))
-    if slice_length != seg_array.shape[0]:
-        print("slice length not match!!!")
+    segmentation_array = sitk.GetArrayFromImage(sitk.ReadImage(segmentation_file))
+    if slice_length != segmentation_array.shape[0]:
+        print("slice length not match segmentation file!!! process next one.")
         break
-    seg_array = np.flip(seg_array, axis=0)
+    segmentation_array = np.flip(segmentation_array, axis=0)
 
-    # 读取肺部数据
-    ct = read_serises_images(series_ct_files)
-    ct_array = sitk.GetArrayFromImage(ct)
+    # 获取相应患者的CT图像
+    series_CT_files = glob(os.path.join(segmentation_file_dir, "CT*"))
+
+    # 读取CT图像
+    CT_image = read_serises_image(series_CT_files)
+    CT_array = sitk.GetArrayFromImage(CT_image)
 
     # 取出CT肺部切片, 文件名由000开始编号, 故如此切片
-    lung_ct_files = series_ct_files[slice_start : slice_end + 1]
-    lung_ct_array = ct_array[slice_start : slice_end + 1]
+    lung_CT_files = series_CT_files[slice_start : slice_end + 1]
+    lung_CT_array = CT_array[slice_start : slice_end + 1]
 
     # 计算肺部的HU
-    lung_hu = np.zeros_like(seg_array, dtype=np.float32)
+    lung_HU = np.zeros_like(segmentation_array, dtype=np.float32)
     for i in range(slice_length):
-        lung_hu[i] = compute_hounsfield_unit(lung_ct_array[i], lung_ct_files[i])
+        lung_HU[i] = compute_hounsfield_unit(lung_CT_array[i], lung_CT_files[i])
 
-    # 计算SUVbw, 并取出肺部数据
-    suvbw = get_resampled_SUVbw_from_petct(series_pet_files, ct)
+    # 获取相应患者的PET图像
+    series_PET_files = glob(os.path.join(segmentation_file_dir, "PET*"))
+
+    # 计算SUVbw
+    SUVbw = get_resampled_SUVbw_from_PETCT(series_PET_files, CT_image)
 
     # 取出SUVbw肺部切片, 文件名由000开始编号, 故如此切片
-    lung_suvbw = suvbw[slice_start : slice_end + 1]
+    lung_SUVbw = SUVbw[slice_start : slice_end + 1]
 
     # 对每个肺部切片开始处理
     for i in range(slice_length):
 
-        # 获取当前分割标签
-        cur_seg = seg_array[i]
+        # 获取当前分割标签d
+        current_segmaentation_array = segmentation_array[i]
 
         # 有分割图时，进行处理
-        if 0 != np.max(cur_seg):
+        if 0 != np.max(current_segmaentation_array):
 
             # 获取当前CT文件名
-            cur_file_name = lung_ct_files[i].split("\\")[-1][:-4]
-            print("%s_%s lung slice file is processing!" % (dir_name, cur_file_name))
+            current_CT_filename = lung_CT_files[i].split("\\")[-1][:-4]
+            print(
+                "%s_%s lung slice file is processing!" % (dir_name, current_CT_filename)
+            )
 
-            # 对 HU 归一化
-            cur_hu = (lung_hu[i] + 1000) / 2000.0
-            cur_suvbw = lung_suvbw[i]
+            # 获取当前的HU和SUVbw
+            current_HU = lung_HU[i]
+            current_SUVbw = lung_SUVbw[i]
 
             # 获取masked后的CT图像
-            masked_CT_1 = np.ma.masked_where(cur_seg == 0, cur_hu)
-            masked_CT_2 = np.ma.masked_where(cur_seg == 1, cur_hu)
+            masked_CT_image_1 = np.ma.masked_where(
+                current_segmaentation_array == 0, current_HU
+            )
+            masked_CT_image_2 = np.ma.masked_where(
+                current_segmaentation_array == 1, current_HU
+            )
 
             # 保存masked后的CT图像
             save_images(
-                [masked_CT_1, masked_CT_2],
-                ["mask 1", "mask 2"],
+                [masked_CT_image_1, masked_CT_image_2],
+                ["masked CT image 1", "masked CT image 2"],
                 ["bone", "bone"],
-                "process/img/%s_%s_mask.png" % (dir_name, cur_file_name),
+                "ProcessedData/image/%s_%s_mask.png" % (dir_name, current_CT_filename),
             )
 
             # 由于每张图片可能存在多个病灶，所以需要定位出每个病灶并计算出每个病灶的suv max，min，mean
             contours, hierarchy = cv2.findContours(
-                cur_seg.astype(np.uint8), cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE
+                current_segmaentation_array.astype(np.uint8),
+                cv2.RETR_LIST,
+                cv2.CHAIN_APPROX_NONE,
             )
 
             # 处理每个病灶
@@ -104,59 +114,55 @@ for seg_file in SEG_LABEL_FILES:
                 contour = np.squeeze(contour)
                 if len(contour.shape) == 1:
                     break
-                indices_max = np.max(contour, axis=0)
-                indices_min = np.min(contour, axis=0)
+                contour_right, contour_lower = np.max(contour, axis=0)
+                contour_left, contour_upper = np.min(contour, axis=0)
 
-                # 计算每个病灶的 suv max, suv mean, suv min
-                masked_suv = np.ma.masked_where(cur_seg == 0, cur_suvbw)
-                cliped_masked_suv = masked_suv[
-                    indices_min[1] : indices_max[1] + 1,
-                    indices_min[0] : indices_max[0] + 1,
+                # 计算每个病灶区域的 suv max, suv mean, suv min
+                masked_SUVbw = np.ma.masked_where(
+                    current_segmaentation_array == 0, current_SUVbw
+                )
+                cropped_masked_SUVbw = masked_SUVbw[
+                    contour_upper : contour_lower + 1, contour_left : contour_right + 1
                 ]
-                suv_max = np.max(cliped_masked_suv)
-                suv_min = np.min(cliped_masked_suv)
-                suv_mean = np.mean(cliped_masked_suv)
+                SUVbw_max = np.max(cropped_masked_SUVbw)
+                SUVbw_min = np.min(cropped_masked_SUVbw)
+                SUVbw_mean = np.mean(cropped_masked_SUVbw)
 
                 # 在CT和切割标签图中切出每个病灶
-                clip_rect = clip_based_boundary(
-                    [
-                        indices_min[1],  # left
-                        indices_min[0],  # upper
-                        indices_max[1],  # right
-                        indices_max[0],  # lower
-                    ],
+                left, upper, right, lower, apply_resize = crop_based_boundary(
+                    [contour_left, contour_upper, contour_right, contour_lower],
                     cliped_size=(32, 32),
                 )
-                cliped_image = cur_hu[
-                    clip_rect[0] : clip_rect[2], clip_rect[1] : clip_rect[3]
+                cropped_HU = current_HU[upper:lower, left:right]
+                cropped_segmentation = current_segmaentation_array[
+                    upper:lower, left:right
                 ]
-                cliped_seg = cur_seg[
-                    clip_rect[0] : clip_rect[2], clip_rect[1] : clip_rect[3]
-                ]
-                if clip_rect[4]:
-                    cliped_image = cv2.resize(cliped_image, (32, 32))
-                    cliped_seg = cv2.resize(cliped_seg, (32, 32))
+                if apply_resize:
+                    cropped_HU = cv2.resize(cropped_HU, (32, 32))
+                    cropped_segmentation = cv2.resize(cropped_segmentation, (32, 32))
                     print("there is one need to resize to 32x32!!")
 
                 # seg 仅保留一个中心的病灶
-                cliped_seg_only_one = only_center_contour(cliped_seg, (15.5, 15.5))
+                cropped_segmentation_only_one = only_center_contour(
+                    cropped_segmentation, (15.5, 15.5)
+                )
 
                 # 保存图像文件
                 save_images(
-                    [cliped_image, cliped_seg, cliped_seg_only_one],
+                    [cropped_HU, cropped_segmentation, cropped_segmentation_only_one],
                     ["img", "seg", "seg_one"],
                     ["bone", "gray", "gray"],
-                    "process/img/%s_%s_%s_cliped.png"
-                    % (dir_name, cur_file_name, str(idx).zfill(2),),
+                    "ProcessedData/image/%s_%s_%s_cliped.png"
+                    % (dir_name, current_CT_filename, str(idx).zfill(2)),
                 )
 
-                # 保存npz文件: cliped hu(32x32), cliped seg(32x32), suvmax, suvmin, suvmean
+                # 保存npz文件: cropped HU(32x32), cropped segmentation(32x32), SUVbw max, SUVbw mean, SUVbw min
                 np.savez(
-                    "process/reg/%s_%s_%s.npz"
-                    % (dir_name, cur_file_name, str(idx).zfill(2),),
-                    hu=cliped_image,
-                    seg=cliped_seg_only_one,
-                    suvmax=suv_max,
-                    suvmean=suv_mean,
-                    suvmin=suv_min,
+                    "ProcessedData/regression/%s_%s_%s.npz"
+                    % (dir_name, current_CT_filename, str(idx).zfill(2),),
+                    HU=cropped_HU,
+                    segmentation=cropped_segmentation_only_one,
+                    max=SUVbw_max,
+                    mean=SUVbw_mean,
+                    min=SUVbw_min,
                 )

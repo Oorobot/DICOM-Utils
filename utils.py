@@ -23,7 +23,7 @@ def save_images(imgs, titles, camps, path):
     plt.close()
 
 
-def clip_based_boundary(
+def crop_based_boundary(
     boundary: Tuple[int, int, int, int],  # [left, upper, right, lower]
     cliped_size: Tuple[int, int] = (64, 64),  # [width, height]
     pic_size: Tuple[int, int] = (512, 512),  # [width, height]
@@ -54,18 +54,18 @@ def clip_based_boundary(
     if boundary_width < cliped_size[0] and boundary_height < cliped_size[1]:
         left, right = get_boundary(center_x, cliped_size[0], pic_size[0])
         upper, lower = get_boundary(center_y, cliped_size[1], pic_size[1])
-        out_of_size = False
+        apply_resize = False
     elif boundary_width >= cliped_size[0] and boundary_height < cliped_size[1]:
         upper, lower = get_boundary(center_y, cliped_size[1], pic_size[1])
-        out_of_size = True
+        apply_resize = True
     elif boundary_width < cliped_size[0] and boundary_height >= cliped_size[1]:
         left, right = get_boundary(center_x, cliped_size[0], pic_size[0])
-        out_of_size = True
+        apply_resize = True
     else:
-        out_of_size = True
+        apply_resize = True
 
-    # 如果 boundary size 大于 cliped size, out_of_size = True
-    return left, upper, right, lower, out_of_size
+    # 如果 boundary size 大于 cliped size, apply_resize = True
+    return left, upper, right, lower, apply_resize
 
 
 def only_center_contour(mask: np.ndarray, center: Tuple[float, float]):
@@ -74,7 +74,7 @@ def only_center_contour(mask: np.ndarray, center: Tuple[float, float]):
     if mask.dtype != np.uint8:
         mask = mask.astype(np.uint8)
 
-    contours, hierarchy = cv2.findContours(mask, cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)
+    contours, _ = cv2.findContours(mask, cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)
     if len(contours) != 1:
         draw_list = []
         for idx, contour in enumerate(contours):
@@ -82,13 +82,13 @@ def only_center_contour(mask: np.ndarray, center: Tuple[float, float]):
             if len(contour.shape) == 1:
                 draw_list.append(idx)
                 continue
-            indices_max = np.max(contour, axis=0)
-            indices_min = np.min(contour, axis=0)
+            contour_right, contour_lower = np.max(contour, axis=0)
+            contour_left, contour_upper = np.min(contour, axis=0)
             if (
-                center[0] < indices_min[1]  # left
-                or center[0] > indices_max[1]  # right
-                or center[1] < indices_min[0]  # upper
-                or center[1] > indices_max[0]  # lower
+                center[0] < contour_left
+                or center[0] > contour_right
+                or center[1] < contour_upper
+                or center[1] > contour_lower
             ):
                 draw_list.append(idx)
         for d in draw_list:
