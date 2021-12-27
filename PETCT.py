@@ -1,7 +1,4 @@
 import datetime
-import os
-import sys
-from glob import glob
 from typing import List, Tuple
 
 import cv2
@@ -240,12 +237,16 @@ def get_resampled_SUVbw_from_PETCT(
     return sitk.GetArrayFromImage(resampled_SUVbw_image)
 
 
-def reg_data_valid(filelist: List[str]):
+def regression_data_validate(filelist: List[str], txt: str):
+    txt_file = open(txt, "w")
     max = 0.0
     min = np.inf
-    abnormal_files = []
+
+    file_list1 = []
+    file_list2 = []
+
     for file in filelist:
-        print("file name: ", file)
+
         data = np.load(file)
         hu = data["HU"]
         seg = data["segmentation"]
@@ -256,9 +257,8 @@ def reg_data_valid(filelist: List[str]):
         contours, _ = cv2.findContours(
             seg.astype(np.uint8), cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE
         )
-        print("the number of segmentation: ", len(contours))
         if len(contours) > 1:
-            abnormal_files.append(file)
+            file_list1.append(file)
 
         if (
             np.isnan(hu).any()
@@ -266,13 +266,26 @@ def reg_data_valid(filelist: List[str]):
             and np.isnan(seg).any()
             and np.isinf(seg).any()
         ):
-            print("--- THIS FILE HAS INF OR NAN ---")
-        print("max: %f, min: %f, mean: %f." % (suvmax, suvmin, suvmean))
+            file_list2.append(file)
+        print(
+            "filename: %s, max: %f, min: %f, mean: %f."
+            % (file, suvmax, suvmin, suvmean),
+            file=txt_file,
+        )
         if suvmax > max:
             max = suvmax
         if suvmin < min:
             min = suvmin
-    print("the max of SUVbw max: ", max)
-    print("the min of SUVbw min: ", min)
-    print("abnormal files: ", abnormal_files)
-
+    print(
+        "the max of SUVbw max: ", max, file=txt_file,
+    )
+    print(
+        "the min of SUVbw min: ", min, file=txt_file,
+    )
+    print(
+        "--- THESE FILES HAVE MORE THAN 2 CONTOUR ---\n", file_list1, file=txt_file,
+    )
+    print(
+        "--- THESE FILES HAS INF OR NAN ---\n", file_list2, file=txt_file,
+    )
+    txt_file.close()

@@ -1,3 +1,4 @@
+import json
 import os
 from typing import List, Tuple
 
@@ -69,7 +70,7 @@ def crop_based_boundary(
 
 
 def only_center_contour(mask: np.ndarray, center: Tuple[float, float]):
-    """对具有多个分割区域的mask，消除其余mask，仅保留中心部分的mask"""
+    """在图像中, 对具有多个分割区域的mask, 消除其余mask, 仅保留中心部分的mask."""
 
     if mask.dtype != np.uint8:
         mask = mask.astype(np.uint8)
@@ -112,19 +113,6 @@ def files_split(files: List[str], ratio: float):
     return selected_files, left_files
 
 
-def write_txt(files: List[str], txt: str):
-    """将一组文件写入 txt 文件中
-
-    Args:
-        files (List[str]): 需要写入txt的一组文件
-        txt (str): txt的文件名
-    """
-    file = open(txt, "w")
-    for line in files:
-        file.writelines(line + "\n")
-    file.close()
-
-
 def mkdir(dir):
     if not os.path.exists(dir):
         os.mkdir(dir)
@@ -143,3 +131,16 @@ def rename(src, dst):
         os.rename(src, dst)
     except (FileNotFoundError):
         print("the dir is not existed.")
+
+
+def save_json(save_path: str, data: dict):
+    assert save_path.split(".")[-1] == "json"
+    with open(save_path, "w") as file:
+        json.dump(data, file)
+
+
+def load_json(file_path: str):
+    assert file_path.split(".")[-1] == "json"
+    with open(file_path, "r") as file:
+        data = json.load(file)
+    return data

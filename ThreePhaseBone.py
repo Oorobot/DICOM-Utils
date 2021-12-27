@@ -1,8 +1,6 @@
-import os
 import numpy as np
 import matplotlib.pyplot as plt
 import SimpleITK as sitk
-import pandas as pd
 import cv2
 
 # 处理骨三相
@@ -66,6 +64,7 @@ def img_process(filename: str, clip_type: str, classes: int, result_path: str):
         plt.imshow(cliped_img[i], plt.cm.gray)
         plt.axis("off")
     plt.savefig(result_path + ".png")
+    plt.close()
     np.savez(result_path + ".npz", flow=flow_phase, pool=pool_phase, label=classes)
 
 

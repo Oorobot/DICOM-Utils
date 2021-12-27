@@ -1,3 +1,5 @@
+from glob import glob
+
 from PETCT import *
 from utils import *
 
