@@ -5,6 +5,7 @@
 /PET-CT
 /ThreePhaseBone
 /ProcessedData
+/TPB
 
 # 文件
 *.dcm
@@ -12,4 +13,5 @@
 *.csv
 *.png
 *.json
+*.zip
 

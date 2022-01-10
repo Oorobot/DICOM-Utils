@@ -74,7 +74,7 @@ hist(suvmin, "suvmin.png")
 hist(suvmean, "suvmean.png")
 
 save_json(
-    "reg_data.json",
+    "ProcessedData/regression/data.json",
     {
         "0-1": max0_1,
         "1-2": max1_2,
