@@ -1,6 +1,7 @@
 import json
 import os
 from typing import List, Tuple
+import stat
 
 import cv2
 import matplotlib.pyplot as plt
@@ -131,6 +132,15 @@ def rename(src, dst):
         os.rename(src, dst)
     except (FileNotFoundError):
         print("the dir is not existed.")
+
+
+def delete(filename):
+    try:
+        os.remove(filename)
+    except:
+        print("the file is unable to delete directly.")
+        os.chmod(filename, stat.S_IWRITE)
+        os.remove(filename)
 
 
 def save_json(save_path: str, data: dict):
