@@ -18,7 +18,7 @@ from utils import *
 
 # # reg数据校验
 reg_data = glob("ProcessedData/regression/*.npz")
-# regression_data_validate(reg_data, "valid.txt")
+regression_data_validate(reg_data, "valid.txt")
 
 # regession 数据 按找 suvmax 进行划分, 画 suvmax, suvmin, suvmean 直方图
 suvmax = []

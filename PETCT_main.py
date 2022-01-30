@@ -1,5 +1,7 @@
 from glob import glob
 
+import pandas as pd
+
 from PETCT import *
 from utils import *
 
@@ -7,9 +9,12 @@ from utils import *
 
 # 常量
 SEGMENTATION_FILES = glob("PET-CT/*/*.nii.gz")
-LUNG_SLICE = np.loadtxt(
-    fname="lung_slice.csv", dtype=np.uint32, delimiter=",", usecols=(1, 2)
-)
+LUNG_SLICE = pd.read_excel("PET-CT/PET-CT.xlsx", "Sheet1")[
+    ["肺部切片第一张", "肺部切片最后一张"]
+].values
+# LUNG_SLICE = np.loadtxt(
+#     fname="lung_slice.csv", dtype=np.uint32, delimiter=",", usecols=(1, 2)
+# )
 
 # # 将分割标签文件移动到 PET-CT 对应的文件夹中, 并重命名为文件夹名
 # new2lod = np.loadtxt(
@@ -55,10 +60,11 @@ for segmentation_file in SEGMENTATION_FILES:
     lung_CT_files = series_CT_files[slice_start : slice_end + 1]
     lung_CT_array = CT_array[slice_start : slice_end + 1]
 
+    # 将 padding value -3024 修改为 0
+    # lung_CT_array[lung_CT_array == -3024] = 0
+
     # 计算肺部的HU
-    lung_HU = np.zeros_like(segmentation_array, dtype=np.float32)
-    for i in range(slice_length):
-        lung_HU[i] = compute_hounsfield_unit(lung_CT_array[i], lung_CT_files[i])
+    lung_HU = lung_CT_array.astype(np.float32)
 
     # 获取相应患者的PET图像
     series_PET_files = glob(os.path.join(segmentation_file_dir, "PET*"))
@@ -136,6 +142,7 @@ for segmentation_file in SEGMENTATION_FILES:
                     cliped_size=(32, 32),
                 )
                 cropped_HU = current_HU[upper:lower, left:right]
+                print(cropped_HU.shape)
                 cropped_segmentation = current_segmaentation_array[
                     upper:lower, left:right
                 ]

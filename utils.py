@@ -1,5 +1,6 @@
 import json
 import os
+from tkinter.tix import Tree
 from typing import List, Tuple
 import stat
 
@@ -25,46 +26,59 @@ def save_images(imgs, titles, camps, path):
     plt.close()
 
 
+def dcm_to_image_based_window(
+    dcm_array: np.ndarray, window_value: float, window_width: float
+):
+    pass
+
+
 def crop_based_boundary(
     boundary: Tuple[int, int, int, int],  # [left, upper, right, lower]
-    cliped_size: Tuple[int, int] = (64, 64),  # [width, height]
+    cliped_size: Tuple[int, int] = (32, 32),  # [width, height]
     pic_size: Tuple[int, int] = (512, 512),  # [width, height]
 ):
     """在一个图片中，以 boundary 为中心剪切出 cliped size 的图片"""
 
     left, upper, right, lower = boundary
-    # boundary 左右均为闭区间, 即[left, right], [upper, lower], 所以 boundary width+1, boundary height+1
-    boundary_width = right + 1 - left
-    boundary_height = lower + 1 - upper
+    # boundary 左右均为闭区间, 即[left, right], [upper, lower].
+    boundary_width = right - left
+    boundary_height = lower - upper
     # boundary's center
     center_x, center_y = (
-        int((left + right) * 0.5),
-        int((upper + lower) * 0.5),
+        (left + right) * 0.5,
+        (upper + lower) * 0.5,
     )
 
     def get_boundary(center, cliped_length, pic_length):
-        assert cliped_length % 2 == 0
-        assert pic_length % 2 == 0
+        # assert cliped_length % 2 == 0
+        # assert pic_length % 2 == 0
         if center - cliped_length * 0.5 <= 0:
-            min, max = 0, cliped_length
+            min, max = 0, cliped_length + 1
         elif center + cliped_length * 0.5 >= pic_length:
-            min, max = pic_length - cliped_length, pic_length
+            min, max = pic_length - cliped_length - 1, pic_length
         else:
-            min, max = center - 0.5 * cliped_length, center + 0.5 * cliped_length
+            min, max = center - 0.5 * cliped_length, center + 0.5 * cliped_length + 1
         return int(min), int(max)
 
     if boundary_width < cliped_size[0] and boundary_height < cliped_size[1]:
-        left, right = get_boundary(center_x, cliped_size[0], pic_size[0])
-        upper, lower = get_boundary(center_y, cliped_size[1], pic_size[1])
+        left, right = get_boundary(center_x, cliped_size[0] - 1, pic_size[0])
+        upper, lower = get_boundary(center_y, cliped_size[1] - 1, pic_size[1])
         apply_resize = False
-    elif boundary_width >= cliped_size[0] and boundary_height < cliped_size[1]:
-        upper, lower = get_boundary(center_y, cliped_size[1], pic_size[1])
-        apply_resize = True
-    elif boundary_width < cliped_size[0] and boundary_height >= cliped_size[1]:
-        left, right = get_boundary(center_x, cliped_size[0], pic_size[0])
-        apply_resize = True
+    # 基于病灶中心按照病灶的边界大小进行切片，修改为 基于病灶中心按照病灶的边界的最长边进行切片，取得正方形，随后resize为32x32
     else:
+        max_length = max(boundary_height, boundary_width)
+        left, right = get_boundary(center_x, max_length, pic_size[0])
+        upper, lower = get_boundary(center_y, max_length, pic_size[1])
         apply_resize = True
+
+    # elif boundary_width >= cliped_size[0] and boundary_height < cliped_size[1]:
+    #     upper, lower = get_boundary(center_y, cliped_size[1], pic_size[1])
+    #     apply_resize = True
+    # elif boundary_width < cliped_size[0] and boundary_height >= cliped_size[1]:
+    #     left, right = get_boundary(center_x, cliped_size[0], pic_size[0])
+    #     apply_resize = True
+    # else:
+    #     apply_resize = True
 
     # 如果 boundary size 大于 cliped size, apply_resize = True
     return left, upper, right, lower, apply_resize
@@ -154,3 +168,12 @@ def load_json(file_path: str):
     with open(file_path, "r") as file:
         data = json.load(file)
     return data
+
+
+# pic = np.zeros((512, 512))
+# left, upper, right, lower, apply_resize = crop_based_boundary([20, 20, 60, 70])
+# pic1 = pic[upper:lower, left:right]
+# left, upper, right, lower, apply_resize = crop_based_boundary([20, 20, 59, 69])
+# pic2 = pic[upper:lower, left:right]
+
+# print(0)

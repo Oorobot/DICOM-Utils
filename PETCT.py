@@ -30,7 +30,7 @@ def to_datetime(time: str) -> datetime.datetime:
     return time_
 
 
-def compute_hounsfield_unit(pixel_value: np.ndarray, file: str) -> np.ndarray:
+def get_hounsfield_unit(file: str) -> np.ndarray:
     """根据 CT tag 信息, 计算每个像素值的 hounsfield unit.
 
     Args:
@@ -40,15 +40,12 @@ def compute_hounsfield_unit(pixel_value: np.ndarray, file: str) -> np.ndarray:
     Returns:
         np.ndarray: CT 的 hounsfield unit 矩阵
     """
-    image = pydicom.dcmread(file)
-    if "RescaleType" in image and image.RescaleType == "HU":
-        hounsfield_unit = pixel_value
-    else:
-        hounsfield_unit = pixel_value * float(image.RescaleSlope) + float(
-            image.RescaleIntercept
-        )
 
-    return hounsfield_unit
+    # SimpleITK 读取的 Array = Pydicom 读取的 Array * RescaleSlope + RescaleIntercept
+    # return sitk.GetArrayFromImage(sitk.ReadImage(file))
+    # 等价与
+    image = pydicom.dcmread(file)
+    return image.pixel_array * float(image.RescaleSlope) + float(image.RescaleIntercept)
 
 
 def compute_SUVbw(pixel_value: np.ndarray, file: str) -> np.ndarray:
