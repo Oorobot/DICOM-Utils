@@ -1,11 +1,63 @@
+import os
 from glob import glob
+from typing import List
 
+import cv2
+import numpy as np
 import pandas as pd
+import SimpleITK as sitk
 
-from PETCT import *
-from utils import *
+from dicom import get_SUVbw_in_GE, read_serises_image
+from utils import crop_based_lesions, only_center_contour, save_images
 
-""" series images的顺序是从肺部上面到下面, .nii.gz的顺序恰好相反，从下面到上面."""
+
+def resample(
+    img: sitk.Image, tar_img: sitk.Image, is_label: bool = False
+) -> sitk.Image:
+
+    resamlper = sitk.ResampleImageFilter()
+    resamlper.SetReferenceImage(tar_img)
+    resamlper.SetOutputPixelType(sitk.sitkFloat32)
+    if is_label:
+        resamlper.SetInterpolator(sitk.sitkNearestNeighbor)
+    else:
+        # resamlper.SetInterpolator(sitk.sitkBSpline)
+        resamlper.SetInterpolator(sitk.sitkLinear)
+    return resamlper.Execute(img)
+
+
+def get_resampled_SUVbw_from_PETCT(
+    PET_files: List[str], CT_image: sitk.Image
+) -> np.ndarray:
+    """对于同一个患者的PETCT, PET将根据CT进行重采样到跟CT一样, 并计算PET的SUVbw.
+
+    Args:
+        PET_files (List[str]): 病患的一系列PET切片文件
+        CT (sitk.Image): 病患的一系列CT, sitk.Image
+
+    Returns:
+        np.ndarray: 与CT一样的三维空间分辨率的suvbw
+    """
+
+    PET_image = read_serises_image(PET_files)
+    PET_array = sitk.GetArrayFromImage(PET_image)
+
+    # 计算每张PET slice的SUVbw
+    SUVbw = np.zeros_like(PET_array, dtype=np.float32)
+    for i in range(PET_array.shape[0]):
+        SUVbw[i] = get_SUVbw_in_GE(PET_array[i], PET_files[i])
+
+    # 将suvbw变为图像, 并根据CT进行重采样.
+    SUVbw_image = sitk.GetImageFromArray(SUVbw)
+    SUVbw_image.SetOrigin(PET_image.GetOrigin())
+    SUVbw_image.SetSpacing(PET_image.GetSpacing())
+    SUVbw_image.SetDirection(PET_image.GetDirection())
+    resampled_SUVbw_image = resample(SUVbw_image, CT_image)
+
+    return sitk.GetArrayFromImage(resampled_SUVbw_image)
+
+
+""" series images的顺序是从肺部上面到下面, .nii.gz的顺序恰好相反, 从下面到上面."""
 
 # 常量
 SEGMENTATION_FILES = glob("PET-CT/*/*.nii.gz")
@@ -137,7 +189,7 @@ for segmentation_file in SEGMENTATION_FILES:
                 SUVbw_mean = np.mean(cropped_masked_SUVbw)
 
                 # 在CT和切割标签图中切出每个病灶
-                left, upper, right, lower, apply_resize = crop_based_boundary(
+                left, upper, right, lower, apply_resize = crop_based_lesions(
                     [contour_left, contour_upper, contour_right, contour_lower],
                     cliped_size=(32, 32),
                 )

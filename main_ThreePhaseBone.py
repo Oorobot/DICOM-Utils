@@ -1,16 +1,14 @@
 from datetime import datetime
-from typing import List
+from glob import glob
 
 import cv2
 import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
-import pydicom
-import SimpleITK as sitk
-from xpinyin import Pinyin
+
+from dicom import get_pixel_value
 
 
-# 处理骨三相
+# 处理骨三相 IMG 等图片格式文件
 def img_process(filename: str, crop_type: str, label: int, save_path: str):
 
     if crop_type == "3 4":
@@ -84,14 +82,9 @@ def img_process(filename: str, crop_type: str, label: int, save_path: str):
     np.savez(save_path + "_JPG.npz", data=resized_images, label=label)
 
 
-def get_dcm_array(filename: str):
-    img = sitk.ReadImage(filename)
-    img_array = sitk.GetArrayFromImage(img)
-    return img_array
-
-
+# 处理骨三相 DCM 格式文件
 def dcm_process(filename: str, label: int, save_path: str):
-    raw_images = get_dcm_array(filename)
+    raw_images = get_pixel_value(filename)
     images = raw_images[0:25]
     # 保存图片
     for i in range(25):
@@ -104,42 +97,46 @@ def dcm_process(filename: str, label: int, save_path: str):
     np.savez(save_path + "_DCM.npz", data=images, label=label)
 
 
-# 校验dcm数据是否匹配xlsx中的数据
-def validate_dcm(flows: List[str], xlsx_name: str):
-    xlsx = pd.read_excel(xlsx_name, sheet_name="Sheet1", usecols=[0, 1, 2])
+# 校验DCM和xlsx之间病患信息是否匹配
+# flows = glob("ThreePhaseBone/*/*FLOW.dcm")
+# validate_dcm(flows, "ThreePhaseBone/2021-11-12.xlsx")
 
-    p = Pinyin()
-    values = xlsx.values
-    for flow in flows:
-        img = pydicom.dcmread(flow)
-        img_arr = get_dcm_array(flow)
-        index = flow.split("\\")[1].split("_")[0]
-        AcqusitionDate = img.AcquisitionDate
-        PatientName = img.PatientName.family_name
-        PatientName = PatientName.replace(" ", "")
+# 数据处理
 
-        xlsx_value = values[int(index) - 1]
-        xlsx_name = xlsx_value[2].strip("\t")
-        xlsx_date = xlsx_value[1].strip("\t")
-        xlsx_date = datetime.strptime(xlsx_date, "%Y-%m-%d").strftime("%Y%m%d")
+# xlsx = pd.read_excel("ThreePhaseBone/2021-11-12.xlsx")
+# infos = xlsx[["编号", "最终结果", "部位", "type"]].values
+# JPG数据处理
+# jpgs = glob("ThreePhaseBone/*/*_1.JPG")
+# for jpg in jpgs:
+#     index = jpg.split("\\")[-1].split("_")[0]
+#     info = infos[int(index) - 1]
+#     bodypart = "hip" if info[2] == "髋" else "knee"
+#     save_path = os.path.join("ProcessedData", bodypart, index)
+#     img_process(jpg, info[-1], info[1], save_path)
 
-        xlsx_pinyin = p.get_pinyin(xlsx_name, splitter="", convert="upper")
-        if (
-            xlsx_pinyin != PatientName
-            or AcqusitionDate != xlsx_date
-            or img_arr.shape[1:] != (128, 128)
-            or img_arr.shape[0] < 25
-        ):
-            print(
-                "filename: %s --- patient name: %s(%s-%s), date: %s-%s, date shape: %s."
-                % (
-                    flow,
-                    xlsx_name,
-                    xlsx_pinyin,
-                    PatientName,
-                    xlsx_date,
-                    AcqusitionDate,
-                    str(img_arr.shape),
-                )
-            )
+# DCM数据处理
+# dcms = glob("ThreePhaseBone/*/*_FLOW.dcm")
+# for dcm in dcms:
+#     index = dcm.split("\\")[-1].split("_")[0]
+#     info = infos[int(index) - 1]
+#     bodypart = "hip" if info[2] == "髋" else "knee"
+#     save_path = os.path.join("ProcessedData", bodypart, index)
+#     dcm_process(dcm, info[1], save_path)
 
+# DCMnpzs = glob("ProcessedData/*/*DCM.npz")
+# FPtxt = open("TPB.txt", "w+")
+# for npz in DCMnpzs:
+#     print("filename: ", npz, file=FPtxt)
+#     npz = np.load(npz)
+#     print(
+#         "the max of flow: %d, the min: %d."
+#         % (np.max(npz["data"][0:20]), np.min(npz["data"][0:20])),
+#         file=FPtxt,
+#     )
+#     print(
+#         "the max of pool: %d, the min: %d."
+#         % (np.max(npz["data"][20:]), np.min(npz["data"][20:])),
+#         file=FPtxt,
+#     )
+
+print("Done.")
