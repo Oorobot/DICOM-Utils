@@ -139,4 +139,26 @@ def dcm_process(filename: str, label: int, save_path: str):
 #         file=FPtxt,
 #     )
 
-print("Done.")
+
+# import shutil
+# import pandas as pd
+# from utils import mkdirs
+
+# xlsx = pd.read_excel("ThreePhaseBone\ThreePhaseBone.xlsx")
+# infos = xlsx[["编号", "部位"]].values
+# mkdirs(["ThreePhaseBone\knee", "ThreePhaseBone\hip"])
+# for i in range(len(infos)):
+
+#     print(str(infos[i][0]).zfill(3), infos[i][1])
+#     folder_name = str(infos[i][0]).zfill(3)
+#     if infos[i][1] == "膝":
+#         shutil.move(
+#             f"ThreePhaseBone/{folder_name}", f"ThreePhaseBone/knee/{folder_name}"
+#         )
+#     else:
+#         shutil.move(
+#             f"ThreePhaseBone/{folder_name}", f"ThreePhaseBone/hip/{folder_name}"
+#         )
+
+
+# print("Done.")
