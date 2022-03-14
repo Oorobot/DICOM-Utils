@@ -64,22 +64,6 @@ SEGMENTATION_FILES = glob("PET-CT/*/*.nii.gz")
 LUNG_SLICE = pd.read_excel("PET-CT/PET-CT.xlsx", "Sheet1")[
     ["肺部切片第一张", "肺部切片最后一张"]
 ].values
-# LUNG_SLICE = np.loadtxt(
-#     fname="lung_slice.csv", dtype=np.uint32, delimiter=",", usecols=(1, 2)
-# )
-
-# # 将分割标签文件移动到 PET-CT 对应的文件夹中, 并重命名为文件夹名
-# new2lod = np.loadtxt(
-#     fname="new2lod.csv", dtype=np.uint32, delimiter=",", skiprows=1, usecols=1
-# )
-# for file in SEG_LABEL_FILES:
-#     new_dir = file.split("\\")[1]
-#     old_dir = new2lod[int(new_dir) - 1]
-#     file_name = str(old_dir).zfill(3) + ".nii.gz"
-#     dst = os.path.join(LUNG_BASE_PATH, str(old_dir).zfill(3), file_name)
-#     print("scr: ", file, ", dst: ", dst)
-#     rename(file, dst)
-
 
 # reg 数据处理
 for segmentation_file in SEGMENTATION_FILES:
@@ -96,6 +80,7 @@ for segmentation_file in SEGMENTATION_FILES:
 
     # 读取分割标签文件, 并翻转, 因为顺序与PETCT相反
     segmentation_array = sitk.GetArrayFromImage(sitk.ReadImage(segmentation_file))
+    # 验证标签数据跟肺部切片是否匹配
     if slice_length != segmentation_array.shape[0]:
         print("slice length not match segmentation file!!! process next one.")
         break
@@ -111,9 +96,6 @@ for segmentation_file in SEGMENTATION_FILES:
     # 取出CT肺部切片, 文件名由000开始编号, 故如此切片
     lung_CT_files = series_CT_files[slice_start : slice_end + 1]
     lung_CT_array = CT_array[slice_start : slice_end + 1]
-
-    # 将 padding value -3024 修改为 0
-    # lung_CT_array[lung_CT_array == -3024] = 0
 
     # 计算肺部的HU
     lung_HU = lung_CT_array.astype(np.float32)

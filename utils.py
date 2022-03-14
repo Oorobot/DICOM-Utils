@@ -1,6 +1,5 @@
 import json
 import os
-from tkinter.tix import Tree
 from typing import List, Tuple
 import datetime
 import stat
@@ -159,12 +158,3 @@ def only_center_contour(mask: np.ndarray, center: Tuple[float, float]):
         for d in draw_list:
             cv2.drawContours(mask, contours, d, (0, 0, 0), cv2.FILLED)
     return mask
-
-
-# pic = np.zeros((512, 512))
-# left, upper, right, lower, apply_resize = crop_based_boundary([20, 20, 60, 70])
-# pic1 = pic[upper:lower, left:right]
-# left, upper, right, lower, apply_resize = crop_based_boundary([20, 20, 59, 69])
-# pic2 = pic[upper:lower, left:right]
-
-# print(0)

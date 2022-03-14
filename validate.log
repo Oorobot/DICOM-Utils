@@ -1,0 +1,10 @@
+===> [2022-03-13 18:34:51] Validate 3403 PET-CT Regression Data.
+[MAX] suvmax: 65.6691, suvmean: 32.6496, suvmin: 12.8004 - [MIN] suvmax: 0.0000, suvmean: 0.0000, suvmin: 0.0000.
+===> [2022-03-13 18:35:07] Validate 449 ThreePhaseBone Patients' Information.
+[File Name] ThreePhaseBone\hip\176\176_FLOW.dcm - [Patient Name] 汉字: 杨莹洁(in excel), 拼音: YANGYINGJI (in excel), YANGYINGJIE (in dicom) - [DateTime] 20180723 (in excel), 20180723 (in dicom) - [IMAGE SHAPE] (50, 128, 128).
+[File Name] ThreePhaseBone\hip\398\398_FLOW.dcm - [Patient Name] 汉字: 顾卫平(in excel), 拼音: GUWEIPING (in excel), GUWEIPING (in dicom) - [DateTime] 20201102 (in excel), 20201101 (in dicom) - [IMAGE SHAPE] (25, 128, 128).
+[File Name] ThreePhaseBone\hip\430\430_FLOW.dcm - [Patient Name] 汉字: 周朝英(in excel), 拼音: ZHOUZHAOYING (in excel), ZHOUCHAOYING (in dicom) - [DateTime] 20210401 (in excel), 20210401 (in dicom) - [IMAGE SHAPE] (50, 128, 128).
+[File Name] ThreePhaseBone\hip\442\442_FLOW.dcm - [Patient Name] 汉字: 曾开君(in excel), 拼音: CENGKAIJUN (in excel), ZENGKAIJUN (in dicom) - [DateTime] 20210429 (in excel), 20210429 (in dicom) - [IMAGE SHAPE] (25, 128, 128).
+[File Name] ThreePhaseBone\knee\162\162_FLOW.dcm - [Patient Name] 汉字: 吕爱芹(in excel), 拼音: LVAIQIN (in excel), LUAIQIN (in dicom) - [DateTime] 20180604 (in excel), 20180604 (in dicom) - [IMAGE SHAPE] (50, 128, 128).
+[File Name] ThreePhaseBone\knee\221\221_FLOW.dcm - [Patient Name] 汉字: 宓英娜(in excel), 拼音: MIYINGNUO (in excel), MIYINGNA (in dicom) - [DateTime] 20190117 (in excel), 20190117 (in dicom) - [IMAGE SHAPE] (25, 128, 128).
+[File Name] ThreePhaseBone\knee\289\289_FLOW.dcm - [Patient Name] 汉字: 曾样莲(in excel), 拼音: CENGYANGLIAN (in excel), ZENGYANGLIAN (in dicom) - [DateTime] 20190729 (in excel), 20190729 (in dicom) - [IMAGE SHAPE] (50, 128, 128).

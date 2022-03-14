@@ -1,9 +1,12 @@
+import os
 from datetime import datetime
 from glob import glob
+from re import M
 
 import cv2
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 
 from dicom import get_pixel_value
 
@@ -83,29 +86,40 @@ def img_process(filename: str, crop_type: str, label: int, save_path: str):
 
 
 # 处理骨三相 DCM 格式文件
-def dcm_process(filename: str, label: int, save_path: str):
-    raw_images = get_pixel_value(filename)
-    images = raw_images[0:25]
+def dcm_process(
+    pixel_value: np.ndarray, label: int, save_path: str, mask: np.ndarray = None
+):
+    flow_and_pool = pixel_value[0:25]
     # 保存图片
     for i in range(25):
         plt.subplot(5, 5, i + 1)
-        plt.imshow(images[i], plt.cm.binary)
+        plt.imshow(flow_and_pool[i], plt.cm.binary)
         plt.axis("off")
     plt.savefig(save_path + "_DCM.png")
     plt.close()
     # 保存数据文件
-    np.savez(save_path + "_DCM.npz", data=images, label=label)
+    if mask is None:
+        np.savez(save_path + "_DCM.npz", data=flow_and_pool, label=label)
+    else:
+        imgs = [
+            flow_and_pool[24],
+            mask[24],
+            np.multiply(flow_and_pool[24], 1 - mask[24]),
+        ]
+        for i in range(3):
+            plt.subplot(1, 3, i + 1)
+            plt.imshow(imgs[i], plt.cm.binary)
+            plt.axis("off")
+        plt.savefig(save_path + "_DCM_.png")
+        plt.close()
+        np.savez(save_path + "_DCM.npz", data=flow_and_pool, label=label, mask=mask[24])
 
 
-# 校验DCM和xlsx之间病患信息是否匹配
-# flows = glob("ThreePhaseBone/*/*FLOW.dcm")
-# validate_dcm(flows, "ThreePhaseBone/2021-11-12.xlsx")
+# 读取数据信息
+xlsx = pd.read_excel("ThreePhaseBone/ThreePhaseBone.xlsx")
+infos = xlsx[["编号", "最终结果", "部位", "type"]].values
 
-# 数据处理
-
-# xlsx = pd.read_excel("ThreePhaseBone/2021-11-12.xlsx")
-# infos = xlsx[["编号", "最终结果", "部位", "type"]].values
-# JPG数据处理
+# # JPG数据处理
 # jpgs = glob("ThreePhaseBone/*/*_1.JPG")
 # for jpg in jpgs:
 #     index = jpg.split("\\")[-1].split("_")[0]
@@ -115,50 +129,22 @@ def dcm_process(filename: str, label: int, save_path: str):
 #     img_process(jpg, info[-1], info[1], save_path)
 
 # DCM数据处理
-# dcms = glob("ThreePhaseBone/*/*_FLOW.dcm")
-# for dcm in dcms:
-#     index = dcm.split("\\")[-1].split("_")[0]
+# dcms = glob("ThreePhaseBone/*/*/*_FLOW.dcm")
+# for d in dcms:
+#     index = d.split("\\")[-1].split("_")[0]
 #     info = infos[int(index) - 1]
 #     bodypart = "hip" if info[2] == "髋" else "knee"
 #     save_path = os.path.join("ProcessedData", bodypart, index)
-#     dcm_process(dcm, info[1], save_path)
+#     pixel_value = get_pixel_value(d)
+#     dcm_process(pixel_value, info[1], save_path)
 
-# DCMnpzs = glob("ProcessedData/*/*DCM.npz")
-# FPtxt = open("TPB.txt", "w+")
-# for npz in DCMnpzs:
-#     print("filename: ", npz, file=FPtxt)
-#     npz = np.load(npz)
-#     print(
-#         "the max of flow: %d, the min: %d."
-#         % (np.max(npz["data"][0:20]), np.min(npz["data"][0:20])),
-#         file=FPtxt,
-#     )
-#     print(
-#         "the max of pool: %d, the min: %d."
-#         % (np.max(npz["data"][20:]), np.min(npz["data"][20:])),
-#         file=FPtxt,
-#     )
-
-
-# import shutil
-# import pandas as pd
-# from utils import mkdirs
-
-# xlsx = pd.read_excel("ThreePhaseBone\ThreePhaseBone.xlsx")
-# infos = xlsx[["编号", "部位"]].values
-# mkdirs(["ThreePhaseBone\knee", "ThreePhaseBone\hip"])
-# for i in range(len(infos)):
-
-#     print(str(infos[i][0]).zfill(3), infos[i][1])
-#     folder_name = str(infos[i][0]).zfill(3)
-#     if infos[i][1] == "膝":
-#         shutil.move(
-#             f"ThreePhaseBone/{folder_name}", f"ThreePhaseBone/knee/{folder_name}"
-#         )
-#     else:
-#         shutil.move(
-#             f"ThreePhaseBone/{folder_name}", f"ThreePhaseBone/hip/{folder_name}"
-#         )
-
-
-# print("Done.")
+# 带有标注数据的 Hip 数据处理
+dcms = glob("ThreePhaseBone/hip_/*/*_FLOW.dcm")
+masks = glob("ThreePhaseBone/hip_/*/*.nii.gz")
+for d, m in zip(dcms, masks):
+    index = d.split("\\")[-1].split("_")[0]
+    info = infos[int(index) - 1]
+    save_path = os.path.join("ProcessedData", "hip_", index)
+    pixel_value = get_pixel_value(d)
+    mask_value = get_pixel_value(m)
+    dcm_process(pixel_value, info[1], save_path, mask_value)
