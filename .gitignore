@@ -4,7 +4,7 @@
 /NewPulmonaryNodule
 /PET-CT
 /ThreePhaseBone
-/ProcessedData
+/_ProcessedData_
 /TPB
 
 # 文件
@@ -14,4 +14,5 @@
 *.png
 *.json
 *.zip
+*.jpg
 test.py

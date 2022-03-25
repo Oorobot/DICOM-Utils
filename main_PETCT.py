@@ -195,13 +195,13 @@ for segmentation_file in SEGMENTATION_FILES:
                     [cropped_HU, cropped_segmentation, cropped_segmentation_only_one],
                     ["img", "seg", "seg_one"],
                     ["bone", "gray", "gray"],
-                    "ProcessedData/image/%s_%s_%s_cliped.png"
+                    "_ProcessedData_/image/%s_%s_%s_cliped.png"
                     % (dir_name, current_CT_filename, str(idx).zfill(2)),
                 )
 
                 # 保存npz文件: cropped HU(32x32), cropped segmentation(32x32), SUVbw max, SUVbw mean, SUVbw min
                 np.savez(
-                    "ProcessedData/regression/%s_%s_%s.npz"
+                    "_ProcessedData_/regression/%s_%s_%s.npz"
                     % (dir_name, current_CT_filename, str(idx).zfill(2),),
                     HU=cropped_HU,
                     segmentation=cropped_segmentation_only_one,
