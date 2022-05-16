@@ -15,4 +15,7 @@
 *.json
 *.zip
 *.jpg
+*.npz
 test.py
+_test_.py
+__test__.py

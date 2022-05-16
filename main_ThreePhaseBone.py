@@ -2,6 +2,7 @@ import os
 from datetime import datetime
 from glob import glob
 from re import M
+from turtle import right
 
 import cv2
 import matplotlib.pyplot as plt
@@ -182,6 +183,13 @@ save_dir = os.path.join("_ProcessedData_", "hip_focus")
 labels = []
 mkdir(save_dir)
 
+normal_left_hip = []
+normal_right_hip = []
+sum_left_hip, sum_right_hip = (
+    np.zeros((25, 40, 40), dtype=np.float32),
+    np.zeros((25, 40, 40), dtype=np.float32),
+)
+
 for d, m in zip(dcms, masks):
     d_dir = os.path.dirname(d)
     m_dir = os.path.dirname(m)
@@ -241,44 +249,75 @@ for d, m in zip(dcms, masks):
     if l_label == -1 or r_label == -1:
         print(f"====> 当前文件找不到对应标签, 跳过.")
         continue
-    labels.extend([r_label, l_label])
-    imgs = [
-        d_value[24],
-        m_value,
-    ]
-    r_hip_filename = os.path.join(save_dir, str(index).zfill(3) + f"_r_{r_label}.npz")
-    l_hip_filename = os.path.join(save_dir, str(index).zfill(3) + f"_l_{l_label}.npz")
-    # if first_right:
-    np.savez(
-        r_hip_filename if first_right else l_hip_filename,
-        data=d_value[0:25],
-        label=r_label if first_right else l_label,
-        boundary=[upper1, lower1, left1, right1],
-    )
-    np.savez(
-        l_hip_filename if first_right else r_hip_filename,
-        data=d_value[0:25],
-        label=l_label if first_right else r_label,
-        boundary=[upper2, lower2, left2, right2],
-    )
 
-    imgs.extend(
-        [
-            d_value[24, upper1 : lower1 + 1, left1 : right1 + 1],
-            d_value[24, upper2 : lower2 + 1, left2 : right2 + 1],
-        ]
-        if first_right
-        else [
-            d_value[24, upper2 : lower2 + 1, left2 : right2 + 1],
-            d_value[24, upper1 : lower1 + 1, left1 : right1 + 1],
-        ]
-    )
-    save_four_images(
-        imgs,
-        titles=["hip", "mask", f"right {r_label}", f"left {l_label}"],
-        camps=[plt.cm.binary, plt.cm.binary, plt.cm.binary, plt.cm.binary],
-        path=os.path.join(save_dir, str(index).zfill(3) + ".png"),
-    )
+    labels.extend([r_label, l_label])
+
+    if r_label == 0:
+        normal_right_hip.append(
+            d_value[0:25, upper1 : lower1 + 1, left1 : right1 + 1]
+            if first_right
+            else d_value[0:25, upper2 : lower2 + 1, left2 : right2 + 1]
+        )
+        sum_right_hip += (
+            d_value[0:25, upper1 : lower1 + 1, left1 : right1 + 1]
+            if first_right
+            else d_value[0:25, upper2 : lower2 + 1, left2 : right2 + 1]
+        )
+    if l_label == 0:
+        normal_left_hip.append(
+            d_value[0:25, upper2 : lower2 + 1, left2 : right2 + 1]
+            if first_right
+            else d_value[0:25, upper1 : lower1 + 1, left1 : right1 + 1]
+        )
+        sum_left_hip += (
+            d_value[0:25, upper2 : lower2 + 1, left2 : right2 + 1]
+            if first_right
+            else d_value[0:25, upper1 : lower1 + 1, left1 : right1 + 1]
+        )
+    # imgs = [
+    #     d_value[24],
+    #     m_value,
+    # ]
+    # r_hip_filename = os.path.join(save_dir, str(index).zfill(3) + f"_r_{r_label}.npz")
+    # l_hip_filename = os.path.join(save_dir, str(index).zfill(3) + f"_l_{l_label}.npz")
+    # # if first_right:
+    # np.savez(
+    #     r_hip_filename if first_right else l_hip_filename,
+    #     data=d_value[0:25],
+    #     label=r_label if first_right else l_label,
+    #     boundary=[upper1, lower1, left1, right1],
+    # )
+    # np.savez(
+    #     l_hip_filename if first_right else r_hip_filename,
+    #     data=d_value[0:25],
+    #     label=l_label if first_right else r_label,
+    #     boundary=[upper2, lower2, left2, right2],
+    # )
+
+    # imgs.extend(
+    #     [
+    #         d_value[24, upper1 : lower1 + 1, left1 : right1 + 1],
+    #         d_value[24, upper2 : lower2 + 1, left2 : right2 + 1],
+    #     ]
+    #     if first_right
+    #     else [
+    #         d_value[24, upper2 : lower2 + 1, left2 : right2 + 1],
+    #         d_value[24, upper1 : lower1 + 1, left1 : right1 + 1],
+    #     ]
+    # )
+    # save_four_images(
+    #     imgs,
+    #     titles=["hip", "mask", f"right {r_label}", f"left {l_label}"],
+    #     camps=[plt.cm.binary, plt.cm.binary, plt.cm.binary, plt.cm.binary],
+    #     path=os.path.join(save_dir, str(index).zfill(3) + ".png"),
+    # )
 
 print("各类标签样本数量: ", np.bincount(labels))
+right_hip = sum_right_hip / len(normal_right_hip)
+left_hip = sum_left_hip / len(normal_left_hip)
+np.savez("normal_hip.npz", right=right_hip, left=left_hip)
+print(0)
+
+
+# 获取 左髋 和 右髋 （正常） 的平均值
 
