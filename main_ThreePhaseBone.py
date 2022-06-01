@@ -135,43 +135,42 @@ def dcm_process(
 
 
 # 读取数据信息
-# xlsx = pd.read_excel("ThreePhaseBone/ThreePhaseBone.xlsx")
-# infos = xlsx[["编号", "最终结果", "部位", "type"]].values
+xlsx = pd.read_excel("ThreePhaseBone/ThreePhaseBone.xlsx")
+infos = xlsx[["编号", "最终结果", "部位", "type"]].values
 
-# # JPG数据处理
-# jpgs = glob("ThreePhaseBone/*/*_1.JPG")
-# for jpg in jpgs:
-#     index = jpg.split("\\")[-1].split("_")[0]
-#     info = infos[int(index) - 1]
-#     bodypart = "hip" if info[2] == "髋" else "knee"
-#     save_path = os.path.join("_ProcessedData_", bodypart, index)
-#     img_process(jpg, info[-1], info[1], save_path)
+# JPG数据处理
+jpgs = glob("ThreePhaseBone/*/*_1.JPG")
+for jpg in jpgs:
+    index = jpg.split("\\")[-1].split("_")[0]
+    info = infos[int(index) - 1]
+    bodypart = "hip" if info[2] == "髋" else "knee"
+    save_path = os.path.join("_ProcessedData_", bodypart, index)
+    img_process(jpg, info[-1], info[1], save_path)
 
 # DCM数据处理
-# dcms = glob("ThreePhaseBone/*/*/*_FLOW.dcm")
-# for d in dcms:
-#     index = d.split("\\")[-1].split("_")[0]
-#     info = infos[int(index) - 1]
-#     bodypart = "hip" if info[2] == "髋" else "knee"
-#     save_path = os.path.join("_ProcessedData_", bodypart, index)
-#     pixel_value = get_pixel_value(d)
-#     dcm_process(pixel_value, info[1], save_path)
+dcms = glob("ThreePhaseBone/*/*/*_FLOW.dcm")
+for d in dcms:
+    index = d.split("\\")[-1].split("_")[0]
+    info = infos[int(index) - 1]
+    bodypart = "hip" if info[2] == "髋" else "knee"
+    save_path = os.path.join("_ProcessedData_", bodypart, index)
+    pixel_value = get_pixel_value(d)
+    dcm_process(pixel_value, info[1], save_path)
 
 # 带有标注无关区域数据的 Hip 数据处理
-# dcms = glob("ThreePhaseBone/hip_none/*/*_FLOW.dcm")
-# masks = glob("ThreePhaseBone/hip_none/*/*.nii.gz")
-# for d, m in zip(dcms, masks):
-#     index = d.split("\\")[-1].split("_")[0]
-#     info = infos[int(index) - 1]
-#     save_path = os.path.join("_ProcessedData_", "hip_", index)
-#     pixel_value = get_pixel_value(d)
-#     mask_value = get_pixel_value(m)
-#     dcm_process(pixel_value, info[1], save_path, mask_value)
+dcms = glob("ThreePhaseBone/hip_none/*/*_FLOW.dcm")
+masks = glob("ThreePhaseBone/hip_none/*/*.nii.gz")
+for d, m in zip(dcms, masks):
+    index = d.split("\\")[-1].split("_")[0]
+    info = infos[int(index) - 1]
+    save_path = os.path.join("_ProcessedData_", "hip_", index)
+    pixel_value = get_pixel_value(d)
+    mask_value = get_pixel_value(m)
+    dcm_process(pixel_value, info[1], save_path, mask_value)
 
 
 # 带有标注髋部区域数据的 Hip 数据处理
 # label: 0 -> 正常, 1 -> 置换手术后非感染, 2 -> 置换手术后感染
-
 
 xlsx = pd.read_excel("ThreePhaseBone/hip_focus/hip_focus.xlsx")
 infos = xlsx[["编号", "最终结果", "左右"]].values
@@ -274,50 +273,47 @@ for d, m in zip(dcms, masks):
             if first_right
             else d_value[0:25, upper1 : lower1 + 1, left1 : right1 + 1]
         )
-    # imgs = [
-    #     d_value[24],
-    #     m_value,
-    # ]
-    # r_hip_filename = os.path.join(save_dir, str(index).zfill(3) + f"_r_{r_label}.npz")
-    # l_hip_filename = os.path.join(save_dir, str(index).zfill(3) + f"_l_{l_label}.npz")
-    # # if first_right:
-    # np.savez(
-    #     r_hip_filename if first_right else l_hip_filename,
-    #     data=d_value[0:25],
-    #     label=r_label if first_right else l_label,
-    #     boundary=[upper1, lower1, left1, right1],
-    # )
-    # np.savez(
-    #     l_hip_filename if first_right else r_hip_filename,
-    #     data=d_value[0:25],
-    #     label=l_label if first_right else r_label,
-    #     boundary=[upper2, lower2, left2, right2],
-    # )
+    imgs = [
+        d_value[24],
+        m_value,
+    ]
+    r_hip_filename = os.path.join(save_dir, str(index).zfill(3) + f"_r_{r_label}.npz")
+    l_hip_filename = os.path.join(save_dir, str(index).zfill(3) + f"_l_{l_label}.npz")
+    # if first_right:
+    np.savez(
+        r_hip_filename if first_right else l_hip_filename,
+        data=d_value[0:25],
+        label=r_label if first_right else l_label,
+        boundary=[upper1, lower1, left1, right1],
+    )
+    np.savez(
+        l_hip_filename if first_right else r_hip_filename,
+        data=d_value[0:25],
+        label=l_label if first_right else r_label,
+        boundary=[upper2, lower2, left2, right2],
+    )
 
-    # imgs.extend(
-    #     [
-    #         d_value[24, upper1 : lower1 + 1, left1 : right1 + 1],
-    #         d_value[24, upper2 : lower2 + 1, left2 : right2 + 1],
-    #     ]
-    #     if first_right
-    #     else [
-    #         d_value[24, upper2 : lower2 + 1, left2 : right2 + 1],
-    #         d_value[24, upper1 : lower1 + 1, left1 : right1 + 1],
-    #     ]
-    # )
-    # save_four_images(
-    #     imgs,
-    #     titles=["hip", "mask", f"right {r_label}", f"left {l_label}"],
-    #     camps=[plt.cm.binary, plt.cm.binary, plt.cm.binary, plt.cm.binary],
-    #     path=os.path.join(save_dir, str(index).zfill(3) + ".png"),
-    # )
+    imgs.extend(
+        [
+            d_value[24, upper1 : lower1 + 1, left1 : right1 + 1],
+            d_value[24, upper2 : lower2 + 1, left2 : right2 + 1],
+        ]
+        if first_right
+        else [
+            d_value[24, upper2 : lower2 + 1, left2 : right2 + 1],
+            d_value[24, upper1 : lower1 + 1, left1 : right1 + 1],
+        ]
+    )
+    save_four_images(
+        imgs,
+        titles=["hip", "mask", f"right {r_label}", f"left {l_label}"],
+        camps=[plt.cm.binary, plt.cm.binary, plt.cm.binary, plt.cm.binary],
+        path=os.path.join(save_dir, str(index).zfill(3) + ".png"),
+    )
 
 print("各类标签样本数量: ", np.bincount(labels))
 right_hip = sum_right_hip / len(normal_right_hip)
 left_hip = sum_left_hip / len(normal_left_hip)
+# 获取（正常）左髋和右髋的平均值
 np.savez("normal_hip.npz", right=right_hip, left=left_hip)
-print(0)
-
-
-# 获取 左髋 和 右髋 （正常） 的平均值
-
+print("结束!")

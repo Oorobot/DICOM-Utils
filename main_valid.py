@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import pydicom
+import SimpleITK as sitk
 from xpinyin import Pinyin
 
 from dicom import get_pixel_value
@@ -121,3 +122,16 @@ validate_PETCT_regression_data(reg_data)
 # 校验骨三相的病人信息数据
 three = glob("ThreePhaseBone/*/*/*FLOW.dcm")
 validate_TPB_patient_information(three, "ThreePhaseBone/ThreePhaseBone.xlsx")
+
+# 查看骨三相的注射药剂
+log = open("test.log", "w", encoding="UTF-8")
+for t in three:
+    reader = sitk.ImageFileReader()
+    reader.SetFileName(t)
+    reader.LoadPrivateTagsOn()
+    reader.ReadImageInformation()
+    RadioNuclideName = reader.GetMetaData("0011|100d")
+
+    log.write(t + ": " + RadioNuclideName + "\n")
+    log.flush()
+log.close()
