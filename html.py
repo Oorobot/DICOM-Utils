@@ -56,25 +56,23 @@ class HTML:
 
 if __name__ == "__main__":
 
-    web_dir = "results/ct2pet/test_50/"
-    webpage = HTML(web_dir, "CT2PET")
+    web_dir = "_ProcessedData_"
+    webpage = HTML(web_dir, "TPB")
 
     ims = []
     txts = []
     links = []
 
-    for _, __, fnames in os.walk(os.path.join(web_dir, "images")):
+    for _, __, fnames in os.walk(web_dir + "/pic"):
         i = 0
         for fname in fnames:
-            strs = fname.split("_")
-            head3 = strs[0]
-            tag = strs[1]
-            ims.append(fname)
-            txts.append(tag)
             links.append(fname)
-    ims = np.array(ims).reshape((-1, 3))
-    txts = np.array(txts).reshape((-1, 3))
-    links = np.array(links).reshape((-1, 3))
+            ims.append(fname)
+            strs = fname.split("_")
+            txts.append(strs)
+    ims = np.array(ims)
+    txts = np.array(txts, dtype=object)
+    links = np.array(links)
     for i in range(0, ims.shape[0]):
         webpage.add_images(ims[i], txts[i], links[i], width=256)
     webpage.save()

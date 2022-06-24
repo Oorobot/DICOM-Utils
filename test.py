@@ -1,6 +1,6 @@
 import os
 from glob import glob
-from turtle import position
+from this import d
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -11,37 +11,59 @@ from dicom import get_pixel_value
 from utils import load_json, mkdir, mkdirs
 import cv2
 
-# 读取数据信息
-xlsx = pd.read_excel("ThreePhaseBone/ThreePhaseBone.xlsx")
-infos = xlsx[["编号", "最终结果", "部位", "type"]].values
+from mlxtend.evaluate import mcnemar, mcnemar_table
 
-knee = "_ProcessedData_/knee/001_DCM.npz"
-hip = "_ProcessedData_/hip/003_DCM.npz"
-hip_ = "_ProcessedData_/hip_/003_DCM.npz"
-hip_focus_mask = "ThreePhaseBone/hip_focus/003/Untitled.nii.gz"
-hip_focus_left = "_ProcessedData_/hip_focus/236_r_1.npz"
-hip_focus_right = "_ProcessedData_/hip_focus/236_r_1.npz"
-normal_hip = np.load("normal_hip.npz")
+xlxs = pd.read_csv("_ProcessedData_\dicom\hip_validate.csv")
+target = xlxs["label"].values
+folds = ["fold1", "fold2", "fold3", "fold4", "fold5"]
+doctors = ["D1", "D2", "D3"]
+for fold in folds:
+    for doctor in doctors:
+        tb = mcnemar_table(
+            y_target=target, y_model1=xlxs[fold].values, y_model2=xlxs[doctor].values
+        )
+        chi2, p = mcnemar(tb)
+        print(f"{fold} - {doctor} - chi2: {chi2} - p: {p}")
+print(0)
 
-save_dir = "_ProcessedData_/pic/"
+# # 读取数据信息
+# xlsx = pd.read_excel("ThreePhaseBone/ThreePhaseBone.xlsx")
+# infos = xlsx[["编号", "最终结果", "部位", "type"]].values
+# hips = glob("ThreePhaseBone/hip/*/*_FLOW.dcm")
+# knees = glob("ThreePhaseBone/knee/*/*_FLOW.dcm")
+# dcms = hips + knees
+# idxs = [int(d.split("\\")[-1].split("_")[0]) for d in dcms]
+# xlsx_nums = infos[:, 0]
+# print(np.setdiff1d(xlsx_nums, idxs))
+# print(0)
+
+# knee = "_ProcessedData_/knee/001_DCM.npz"
+# hip = "_ProcessedData_/hip/003_DCM.npz"
+# hip_ = "_ProcessedData_/hip_/003_DCM.npz"
+# hip_focus_mask = "ThreePhaseBone/hip_focus/003/Untitled.nii.gz"
+# hip_focus_left = "_ProcessedData_/hip_focus/236_r_1.npz"
+# hip_focus_right = "_ProcessedData_/hip_focus/236_r_1.npz"
+# normal_hip = np.load("normal_hip.npz")
+
+# save_dir = "_ProcessedData_/pic/"
 
 
-def normalized(data: np.ndarray, ratio: float = 0.5, mask: np.ndarray = None):
-    flow_max = np.max(data[00:20]) * ratio
-    pool_max = np.max(data[20:25]) * ratio
-    if mask is not None:
-        data = data * (1 - mask) + data * (mask / 6.0)
-    normalized_flow = data[00:20] / flow_max
-    normalized_pool = data[20:25] / pool_max
-    return np.concatenate((normalized_flow, normalized_pool), axis=0)
+# def normalized(data: np.ndarray, ratio: float = 0.5, mask: np.ndarray = None):
+#     flow_max = np.max(data[00:20]) * ratio
+#     pool_max = np.max(data[20:25]) * ratio
+#     if mask is not None:
+#         data = data * (1 - mask) + data * (mask / 6.0)
+#     normalized_flow = data[00:20] / flow_max
+#     normalized_pool = data[20:25] / pool_max
+#     return np.concatenate((normalized_flow, normalized_pool), axis=0)
 
 
 # knee
 # data = np.load(knee)["data"]
 # data = normalized(data, 0.5)
 # # 保存图片
-mask = np.load("0_0.npy")
-heatmap = cv2.applyColorMap(np.uint8(255 * mask), cv2.COLORMAP_JET)
+# mask = np.load("0_0.npy")
+# heatmap = cv2.applyColorMap(np.uint8(255 * mask), cv2.COLORMAP_JET)
 # heatmap = np.float32(heatmap) / 255
 # for i in range(25):
 
@@ -68,31 +90,31 @@ heatmap = cv2.applyColorMap(np.uint8(255 * mask), cv2.COLORMAP_JET)
 # plt.close()
 
 
-# hip
-data = np.load(hip_focus_left)["data"]
-data = normalized(data, 0.5)
-boundary = np.load(hip_focus_left)["boundary"]
-mask = np.load("1_1.npy")
-heatmap = cv2.applyColorMap(np.uint8(255 * np.squeeze(mask)), cv2.COLORMAP_JET)
-heatmap = np.float32(heatmap) / 255
-# 保存图片
-for i in range(25):
-    img = 1 - data[i]
-    img = img[:, :, np.newaxis]
+# # hip
+# data = np.load(hip_focus_left)["data"]
+# data = normalized(data, 0.5)
+# boundary = np.load(hip_focus_left)["boundary"]
+# mask = np.load("1_1.npy")
+# heatmap = cv2.applyColorMap(np.uint8(255 * np.squeeze(mask)), cv2.COLORMAP_JET)
+# heatmap = np.float32(heatmap) / 255
+# # 保存图片
+# for i in range(25):
+#     img = 1 - data[i]
+#     img = img[:, :, np.newaxis]
 
-    new_img = np.repeat(img, repeats=3, axis=2)
+#     new_img = np.repeat(img, repeats=3, axis=2)
 
-    cam = (
-        heatmap
-        + new_img[boundary[0] : boundary[1] + 1, boundary[2] : boundary[3] + 1, :]
-    )
-    cam = cam / np.max(cam)
-    new_img[boundary[0] : boundary[1] + 1, boundary[2] : boundary[3] + 1, :] = cam
-    cv2.namedWindow("image")
-    cv2.imshow("image", new_img)
-    cv2.waitKey()
-    cv2.destroyAllWindows()
-    cv2.imwrite(f"{i}.jpg", new_img * 255)
+#     cam = (
+#         heatmap
+#         + new_img[boundary[0] : boundary[1] + 1, boundary[2] : boundary[3] + 1, :]
+#     )
+#     cam = cam / np.max(cam)
+#     new_img[boundary[0] : boundary[1] + 1, boundary[2] : boundary[3] + 1, :] = cam
+#     cv2.namedWindow("image")
+#     cv2.imshow("image", new_img)
+#     cv2.waitKey()
+#     cv2.destroyAllWindows()
+#     cv2.imwrite(f"{i}.jpg", new_img * 255)
 
 # hip_
 # data = np.load(hip_)
@@ -214,11 +236,11 @@ for i in range(25):
 #     )
 #     plt.close()
 
-# hip with boundary
-data = np.load(hip)["data"]
-data = normalized(data, 0.5)
-boundary_left = np.load(hip_focus_left)["boundary"]
-boundary_right = np.load(hip_focus_right)["boundary"]
+# # hip with boundary
+# data = np.load(hip)["data"]
+# data = normalized(data, 0.5)
+# boundary_left = np.load(hip_focus_left)["boundary"]
+# boundary_right = np.load(hip_focus_right)["boundary"]
 # data[
 #     -1,
 #     boundary_right[0] : boundary_right[1] + 1,
@@ -277,7 +299,7 @@ boundary_right = np.load(hip_focus_right)["boundary"]
 # origin_k = []
 # changed_k = []
 
-# knee_validate = np.sort(knee_validate)
+# # knee_validate = np.sort(knee_validate)
 # knee_label = [
 #     np.load(k.replace("data", "_ProcessedData_"))["label"] for k in knee_validate
 # ]
@@ -308,13 +330,13 @@ boundary_right = np.load(hip_focus_right)["boundary"]
 # dataframe = pd.DataFrame(
 #     {"origin_file": origin_k, "file": changed_k, "label": knee_label}
 # )
-# dataframe.to_csv(f"_ProcessedData_/dicom/knee/knee_with_label.csv")
+# dataframe.to_csv(f"_ProcessedData_/dicom/knee_validate.csv")
 
 # origin_h = []
 # changed_h = []
 # pos = []
 
-# hip_validate = np.sort(hip_validate)
+# # hip_validate = np.sort(hip_validate)
 # hip_label = [
 #     np.load(h.replace("data", "_ProcessedData_"))["label"] - 1 for h in hip_validate
 # ]
@@ -346,7 +368,7 @@ boundary_right = np.load(hip_focus_right)["boundary"]
 # dataframe = pd.DataFrame(
 #     {"origin_file": origin_h, "file": changed_h, "position": pos, "label": hip_label}
 # )
-# dataframe.to_csv(f"_ProcessedData_/dicom/hip/hip_with_label.csv")
+# dataframe.to_csv(f"_ProcessedData_/dicom/hip_validate.csv")
 
 
 # import pandas as pd
