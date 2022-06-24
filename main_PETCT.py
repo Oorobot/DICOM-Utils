@@ -8,7 +8,13 @@ import pandas as pd
 import SimpleITK as sitk
 
 from dicom import get_SUVbw_in_GE, read_serises_image
-from utils import crop_based_lesions, only_center_contour, save_images
+from utils import (
+    crop_based_lesions,
+    mkdirs,
+    only_center_contour,
+    save_images,
+    OUTPUT_DIR,
+)
 
 
 def resample(
@@ -64,6 +70,11 @@ SEGMENTATION_FILES = glob("PET-CT/*/*.nii.gz")
 LUNG_SLICE = pd.read_excel("PET-CT/PET-CT.xlsx", "Sheet1")[
     ["肺部切片第一张", "肺部切片最后一张"]
 ].values
+
+# 输出文件路径
+image_dir = os.path.join(OUTPUT_DIR, "images")
+data_dir = os.path.join(OUTPUT_DIR, "data")
+mkdirs([OUTPUT_DIR, image_dir, data_dir])
 
 # reg 数据处理
 for segmentation_file in SEGMENTATION_FILES:
@@ -141,7 +152,7 @@ for segmentation_file in SEGMENTATION_FILES:
                 [masked_CT_image_1, masked_CT_image_2],
                 ["masked CT image 1", "masked CT image 2"],
                 ["bone", "bone"],
-                "ProcessedData/image/%s_%s_mask.png" % (dir_name, current_CT_filename),
+                os.path.join(image_dir, f"{dir_name}_{current_CT_filename}_mask"),
             )
 
             # 由于每张图片可能存在多个病灶，所以需要定位出每个病灶并计算出每个病灶的suv max，min，mean
@@ -195,14 +206,18 @@ for segmentation_file in SEGMENTATION_FILES:
                     [cropped_HU, cropped_segmentation, cropped_segmentation_only_one],
                     ["img", "seg", "seg_one"],
                     ["bone", "gray", "gray"],
-                    "_ProcessedData_/image/%s_%s_%s_cliped.png"
-                    % (dir_name, current_CT_filename, str(idx).zfill(2)),
+                    os.path.join(
+                        image_dir,
+                        f"{dir_name}_{current_CT_filename}_{str(idx).zfill(2)}_cliped",
+                    ),
                 )
 
                 # 保存npz文件: cropped HU(32x32), cropped segmentation(32x32), SUVbw max, SUVbw mean, SUVbw min
                 np.savez(
-                    "_ProcessedData_/regression/%s_%s_%s.npz"
-                    % (dir_name, current_CT_filename, str(idx).zfill(2),),
+                    os.path.join(
+                        data_dir,
+                        f"{dir_name}_{current_CT_filename}_{str(idx).zfill(2)}",
+                    ),
                     HU=cropped_HU,
                     segmentation=cropped_segmentation_only_one,
                     max=SUVbw_max,

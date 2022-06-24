@@ -1,10 +1,8 @@
 # 文件夹
 /__pycache__
-/LUNA16
-/NewPulmonaryNodule
 /PET-CT
 /ThreePhaseBone
-/_ProcessedData_
+/Files
 /TPB
 
 # 文件

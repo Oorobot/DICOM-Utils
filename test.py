@@ -1,30 +1,48 @@
-import os
+# import os
+# from glob import glob
+
+# # import matplotlib.pyplot as plt
+# import numpy as np
+# import pandas as pd
+# import pydicom
+
+# from dicom import get_pixel_value
+# from utils import load_json, mkdir, mkdirs
+# import cv2
+import os, shutil
 from glob import glob
-from this import d
 
-import matplotlib.pyplot as plt
-import numpy as np
-import pandas as pd
-import pydicom
-
-from dicom import get_pixel_value
-from utils import load_json, mkdir, mkdirs
-import cv2
-
-from mlxtend.evaluate import mcnemar, mcnemar_table
-
-xlxs = pd.read_csv("_ProcessedData_\dicom\hip_validate.csv")
-target = xlxs["label"].values
-folds = ["fold1", "fold2", "fold3", "fold4", "fold5"]
-doctors = ["D1", "D2", "D3"]
-for fold in folds:
-    for doctor in doctors:
-        tb = mcnemar_table(
-            y_target=target, y_model1=xlxs[fold].values, y_model2=xlxs[doctor].values
-        )
-        chi2, p = mcnemar(tb)
-        print(f"{fold} - {doctor} - chi2: {chi2} - p: {p}")
+none = glob("ThreePhaseBone/hip_none/*/*.nii.gz")
+mask = []
+for n in none:
+    dir_name = os.path.dirname(n)
+    dir_name = dir_name.replace("hip_none", "hip")
+    new_filename = os.path.join(dir_name, "mask.nii.gz")
+    shutil.copy(n, new_filename)
+    # mask.append(os.path.join(dir_name, "mask.nii.gz"))
+focus = glob("ThreePhaseBone/hip_focus/*/*.nii.gz")
+roi = []
+for f in focus:
+    dir_name = os.path.dirname(f)
+    dir_name = dir_name.replace("hip_focus", "hip")
+    shutil.copy(f, os.path.join(dir_name, "roi.nii.gz"))
+    # roi.append(os.path.join(dir_name, "roi.nii.gz"))
 print(0)
+
+# from mlxtend.evaluate import mcnemar, mcnemar_table
+
+# xlxs = pd.read_csv("_ProcessedData_\dicom\hip_validate.csv")
+# target = xlxs["label"].values
+# folds = ["fold1", "fold2", "fold3", "fold4", "fold5"]
+# doctors = ["D1", "D2", "D3"]
+# for fold in folds:
+#     for doctor in doctors:
+#         tb = mcnemar_table(
+#             y_target=target, y_model1=xlxs[fold].values, y_model2=xlxs[doctor].values
+#         )
+#         chi2, p = mcnemar(tb)
+#         print(f"{fold} - {doctor} - chi2: {chi2} - p: {p}")
+# print(0)
 
 # # 读取数据信息
 # xlsx = pd.read_excel("ThreePhaseBone/ThreePhaseBone.xlsx")
