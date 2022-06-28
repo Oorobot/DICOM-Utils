@@ -181,3 +181,4 @@ def get_all_SUV_in_GE(
     SUVbsa = pixel_value * bsa / actual_activity  # cm2/ml
     SUVlbm = pixel_value * lbm * 1000 / actual_activity  # g/ml
     return SUVbw, SUVbsa, SUVlbm
+

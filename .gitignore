@@ -1,5 +1,5 @@
 # 文件夹
-/__pycache__
+*__pycache__
 /PET-CT
 /ThreePhaseBone
 /Files

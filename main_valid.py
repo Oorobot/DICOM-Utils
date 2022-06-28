@@ -11,7 +11,7 @@ import pydicom
 import SimpleITK as sitk
 from xpinyin import Pinyin
 
-from dicom import get_pixel_value
+from utils.dicom import get_pixel_value
 
 
 def validate_PETCT_regression_data(filelist: List[str]):
