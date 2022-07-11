@@ -1,9 +1,18 @@
+from datetime import datetime
+from typing import List, Tuple
+
 import numpy as np
 import pydicom
 import SimpleITK as sitk
-from typing import List, Tuple
 
-from utils import string_to_datetime
+
+def string_to_datetime(time: str) -> datetime:
+    """转换字符串(format: %Y%m%d%H%M%S or %Y%m%d%H%M%S.%f)为 datetime 类型数据"""
+    try:
+        date_time = datetime.strptime(time, "%Y%m%d%H%M%S")
+    except:
+        date_time = datetime.strptime(time, "%Y%m%d%H%M%S.%f")
+    return date_time
 
 
 def get_pixel_array(filename: str):
@@ -49,8 +58,8 @@ def get_hounsfield_unit(filename: str) -> np.ndarray:
 
 # PET(DCM格式): 获取 SUVbw 矩阵.
 def get_SUVbw(pixel_value: np.ndarray, file: str) -> np.ndarray:
-    """来源: https://qibawiki.rsna.org/index.php/Standardized_Uptake_Value_(SUV) 中 "SUV Calculation" 
-        \n 根据 PET 的 tag 信息, 计算每个像素值的 SUVbw, 不适用于 GE Medical.
+    """来源: https://qibawiki.rsna.org/index.php/Standardized_Uptake_Value_(SUV) 中 "SUV Calculation"
+    \n 根据 PET 的 tag 信息, 计算每个像素值的 SUVbw, 不适用于 GE Medical.
     """
     image = pydicom.dcmread(file)
 
@@ -141,7 +150,7 @@ def get_all_SUV_in_GE(
 
     bw = image.PatientWeight * 1000  # g
     bsa = (
-        (image.PatientWeight ** 0.425)
+        (image.PatientWeight**0.425)
         * ((image.PatientSize * 100) ** 0.725)
         * 0.007184
         * 10000
@@ -181,4 +190,3 @@ def get_all_SUV_in_GE(
     SUVbsa = pixel_value * bsa / actual_activity  # cm2/ml
     SUVlbm = pixel_value * lbm * 1000 / actual_activity  # g/ml
     return SUVbw, SUVbsa, SUVlbm
-

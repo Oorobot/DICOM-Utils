@@ -1,36 +1,21 @@
-import datetime
+import copy
 import os
 from glob import glob
 from typing import List, Tuple
 
 import cv2
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import SimpleITK as sitk
 
-from utils import OUTPUT_DIR
 from utils.dicom import get_SUVbw_in_GE, read_serises_image
-from utils.tool import load_json, mkdirs
+from utils.utils import OUTPUT_FOLDER, mkdirs
 
 
-def save_images(imgs, titles, camps, path):
-    for i in range(len(imgs)):
-        plt.subplot(1, len(imgs), i + 1)
-        plt.title(titles[i])
-        plt.imshow(imgs[i], camps[i])
-        plt.axis("off")
-    plt.savefig(path)
-    plt.close()
-
-
-def string_to_datetime(time: str) -> datetime.datetime:
-    """转换字符串(format: %Y%m%d%H%M%S or %Y%m%d%H%M%S.%f)为 datetime 类型数据"""
-    try:
-        date_time = datetime.datetime.strptime(time, "%Y%m%d%H%M%S")
-    except:
-        date_time = datetime.datetime.strptime(time, "%Y%m%d%H%M%S.%f")
-    return date_time
+def normalize(hu: np.ndarray):
+    hu = np.clip(hu, -1000, 1000)
+    hu = hu / 2000 + 0.5
+    return hu
 
 
 def crop_based_lesions(
@@ -155,9 +140,9 @@ LUNG_SLICE = pd.read_excel("PET-CT/PET-CT.xlsx", "Sheet1")[
 ].values
 
 # 输出文件路径
-image_dir = os.path.join(OUTPUT_DIR, "images")
-data_dir = os.path.join(OUTPUT_DIR, "data")
-mkdirs([OUTPUT_DIR, image_dir, data_dir])
+data_folder = os.path.join(OUTPUT_FOLDER, "PETCT")
+image_folder = os.path.join(OUTPUT_FOLDER, "PETCT", "images")
+mkdirs([OUTPUT_FOLDER, data_folder, image_folder])
 
 # reg 数据处理
 for segmentation_file in SEGMENTATION_FILES:
@@ -220,23 +205,11 @@ for segmentation_file in SEGMENTATION_FILES:
 
             # 获取当前的HU和SUVbw
             current_HU = lung_HU[i]
+            current_HU_img = copy.deepcopy(current_HU)
+            current_HU_img = normalize(current_HU_img) * 255
+            # current_HU_img = current_HU_img[:, :, np.newaxis]
+            # current_HU_img = np.repeat(current_HU_img, repeats=3, axis=2)
             current_SUVbw = lung_SUVbw[i]
-
-            # 获取masked后的CT图像
-            masked_CT_image_1 = np.ma.masked_where(
-                current_segmaentation_array == 0, current_HU
-            )
-            masked_CT_image_2 = np.ma.masked_where(
-                current_segmaentation_array == 1, current_HU
-            )
-
-            # 保存masked后的CT图像
-            save_images(
-                [masked_CT_image_1, masked_CT_image_2],
-                ["masked CT image 1", "masked CT image 2"],
-                ["bone", "bone"],
-                os.path.join(image_dir, f"{dir_name}_{current_CT_filename}_mask"),
-            )
 
             # 由于每张图片可能存在多个病灶，所以需要定位出每个病灶并计算出每个病灶的suv max，min，mean
             contours, hierarchy = cv2.findContours(
@@ -245,14 +218,33 @@ for segmentation_file in SEGMENTATION_FILES:
                 cv2.CHAIN_APPROX_NONE,
             )
 
+            # 将每个轮廓绘制在 CT_img 上
+            cv2.drawContours(current_HU_img, contours, -1, (255, 255, 255), 1)
+            cv2.imwrite(
+                os.path.join(image_folder, f"{dir_name}_{current_CT_filename}.jpg"),
+                current_HU_img,
+                [int(cv2.IMWRITE_JPEG_QUALITY), 100],
+            )
+
             # 处理每个病灶
             for idx, contour in enumerate(contours):
+
                 contour = np.squeeze(contour)
                 if len(contour.shape) == 1:
                     break
+
+                # 将每个轮廓绘制在 CT_img 上
+                cv2.polylines(
+                    current_HU_img,
+                    [contour],
+                    isClosed=True,
+                    color=(0, 0, 255),
+                    thickness=1,
+                )
+
+                # 获得每个病灶的大致位置
                 contour_right, contour_lower = np.max(contour, axis=0)
                 contour_left, contour_upper = np.min(contour, axis=0)
-
                 # 计算每个病灶区域的 suv max, suv mean, suv min
                 masked_SUVbw = np.ma.masked_where(
                     current_segmaentation_array == 0, current_SUVbw
@@ -283,22 +275,10 @@ for segmentation_file in SEGMENTATION_FILES:
                 cropped_segmentation_only_one = only_center_contour(
                     cropped_segmentation, (15.5, 15.5)
                 )
-
-                # 保存图像文件
-                save_images(
-                    [cropped_HU, cropped_segmentation, cropped_segmentation_only_one],
-                    ["img", "seg", "seg_one"],
-                    ["bone", "gray", "gray"],
-                    os.path.join(
-                        image_dir,
-                        f"{dir_name}_{current_CT_filename}_{str(idx).zfill(2)}_cliped",
-                    ),
-                )
-
                 # 保存npz文件: cropped HU(32x32), cropped segmentation(32x32), SUVbw max, SUVbw mean, SUVbw min
                 np.savez(
                     os.path.join(
-                        data_dir,
+                        data_folder,
                         f"{dir_name}_{current_CT_filename}_{str(idx).zfill(2)}",
                     ),
                     HU=cropped_HU,
@@ -306,4 +286,30 @@ for segmentation_file in SEGMENTATION_FILES:
                     max=SUVbw_max,
                     mean=SUVbw_mean,
                     min=SUVbw_min,
+                )
+
+                # 保存图像文件
+                cv2.imwrite(
+                    os.path.join(
+                        image_folder,
+                        f"{dir_name}_{current_CT_filename}_{str(idx).zfill(2)}_img.jpg",
+                    ),
+                    normalize(copy.deepcopy(cropped_HU)) * 255,
+                    [int(cv2.IMWRITE_JPEG_QUALITY), 100],
+                )
+                cv2.imwrite(
+                    os.path.join(
+                        image_folder,
+                        f"{dir_name}_{current_CT_filename}_{str(idx).zfill(2)}_seg.jpg",
+                    ),
+                    cropped_segmentation * 255,
+                    [int(cv2.IMWRITE_JPEG_QUALITY), 100],
+                )
+                cv2.imwrite(
+                    os.path.join(
+                        image_folder,
+                        f"{dir_name}_{current_CT_filename}_{str(idx).zfill(2)}_seg_one.jpg",
+                    ),
+                    cropped_segmentation_only_one * 255,
+                    [int(cv2.IMWRITE_JPEG_QUALITY), 100],
                 )

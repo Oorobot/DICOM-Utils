@@ -1,14 +1,37 @@
 import os
+from copy import deepcopy
 from glob import glob
+from types import TracebackType
+from typing import List
 
 import cv2
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-from utils import OUTPUT_DIR
 from utils.dicom import get_pixel_value
-from utils.tool import mkdir, mkdirs
+from utils.utils import OUTPUT_FOLDER, mkdirs
+
+
+def normalize(
+    input: np.ndarray,
+    mask: np.ndarray = None,
+    dicom_window_ratio: float = 0.5,
+    reduction_ratio: float = 1.0 / 6.0,
+):
+    if input.shape[0] == 25:
+        flow_max = np.max(input[00:20]) * dicom_window_ratio
+        pool_max = np.max(input[20:25]) * dicom_window_ratio
+        if mask is not None:
+            input = input * (1 - mask) + input * (mask * reduction_ratio)
+        normalized_flow = np.clip(input[00:20], 0, flow_max) / flow_max
+        normalized_pool = np.clip(input[20:25], 0, pool_max) / pool_max
+        return np.concatenate((normalized_flow, normalized_pool), axis=0)
+    else:
+        max = np.max(input) * dicom_window_ratio
+        if mask is not None:
+            input = input * (1 - mask) + input * (mask * reduction_ratio)
+        normalized_input = np.clip(input, 0, max) / max
+        return normalized_input
 
 
 def get_mask_boundary(contour):
@@ -19,287 +42,272 @@ def get_mask_boundary(contour):
 
 
 # 处理骨三相 IMG 等图片格式文件
-def img_process(filename: str, crop_type: str, label: int, save_path: str):
+def image_process(filelist: List[str], infomation: list, data_folders):
+    for file in filelist:
+        index = os.path.basename(os.path.dirname(file))
+        info = infomation[int(index) - 1]
+        save_folder = data_folders[1] if info[2] == "髋" else data_folders[0]
+        crop_type = info[-1]
+        label = info[1]
 
-    if crop_type == "3 4":
-        x = 130
-        y = 77
-        pic_width = 160
-        pic_height = 120
-        displacement_x = 406
-        displacement_y = 169
-    elif crop_type == "4 4":
-        x = 155
-        y = 86 + 125
-        pic_width = 110
-        pic_height = 86
-        displacement_x = 405
-        displacement_y = 125
-    else:
-        return
+        if crop_type == "3 4":
+            x = 130
+            y = 77
+            pic_width = 160
+            pic_height = 120
+            displacement_x = 406
+            displacement_y = 169
+        elif crop_type == "4 4":
+            x = 155
+            y = 86 + 125
+            pic_width = 110
+            pic_height = 86
+            displacement_x = 405
+            displacement_y = 125
+        else:
+            continue
 
-    # 读取图像(灰度图)
-    image = cv2.imread(filename, cv2.IMREAD_GRAYSCALE)
-    # 裁剪下来的16张图象, blood flow phase 前12张, blood pool phase 后4张
-    cropped_images = []
-    # 每张裁剪下来后resize到256x256的图像
-    resized_images = []
+        # 读取图像(灰度图)
+        image = cv2.imread(file, cv2.IMREAD_GRAYSCALE)
+        # 裁剪下来的16张图象, blood flow phase 前12张, blood pool phase 后4张
+        cropped_images = []
+        # 每张裁剪下来后resize到256x256的图像
+        resized_images = []
 
-    for i in range(3):
-        for j in range(4):
-            an_image = image[
-                y + i * displacement_y : y + pic_height + i * displacement_y,
-                x + j * displacement_x : x + pic_width + j * displacement_x,
-            ]
-            cropped_images.append(an_image)
-            # resize -> 256x256
-            resized_images.append(cv2.resize(an_image, (256, 256)))
-
-    x = 294
-    y = 602
-    pic_width = 240
-    pic_height = 180
-    displacement_x = 813
-    displacement_y = 253
-
-    for i in range(2):
-        for j in range(2):
-            an_image = image[
-                y + i * displacement_y : y + pic_height + i * displacement_y,
-                x + j * displacement_x : x + pic_width + j * displacement_x,
-            ]
-            # resize -> 256x256
-            cropped_images.append(an_image)
-            # resize -> 256x256
-            resized_images.append(cv2.resize(an_image, (256, 256)))
-
-    resized_images = np.array(resized_images)
-    # 保存图片
-    for i in range(16):
-        plt.subplot(4, 4, i + 1)
-        plt.imshow(resized_images[i], plt.cm.gray)
-        plt.axis("off")
-    plt.savefig(save_path + "_JPG")
-    plt.close()
-    # 保存数据文件
-    np.savez(save_path + "_JPG", data=resized_images, label=label)
-
-
-# 处理骨三相 DCM 格式文件
-def dcm_process(
-    pixel_value: np.ndarray, label: int, save_path: str, mask: np.ndarray = None,
-):
-    flow_and_pool = pixel_value[0:25]
-    # 保存图片
-    for i in range(25):
-        plt.subplot(5, 5, i + 1)
-        plt.imshow(flow_and_pool[i], plt.cm.binary)
-        plt.axis("off")
-    plt.savefig(save_path + "_DCM")
-    plt.close()
-    # 保存数据文件
-    if mask is None:
-        np.savez(save_path + "_DCM", data=flow_and_pool, label=label)
-    else:
-        imgs = [
-            flow_and_pool[24],
-            mask[24],
-            np.multiply(flow_and_pool[24], 1 - mask[24]),
-        ]
         for i in range(3):
-            plt.subplot(1, 3, i + 1)
-            plt.imshow(imgs[i], plt.cm.binary)
-            plt.axis("off")
-        plt.savefig(save_path + "_mask")
-        plt.close()
-        np.savez(save_path + "_mask", data=flow_and_pool, label=label, mask=mask[24])
+            for j in range(4):
+                an_image = image[
+                    y + i * displacement_y : y + pic_height + i * displacement_y,
+                    x + j * displacement_x : x + pic_width + j * displacement_x,
+                ]
+                cropped_images.append(an_image)
+                # resize -> 256x256
+                resized_images.append(cv2.resize(an_image, (256, 256)))
 
+        x = 294
+        y = 602
+        pic_width = 240
+        pic_height = 180
+        displacement_x = 813
+        displacement_y = 253
+
+        for i in range(2):
+            for j in range(2):
+                an_image = image[
+                    y + i * displacement_y : y + pic_height + i * displacement_y,
+                    x + j * displacement_x : x + pic_width + j * displacement_x,
+                ]
+                # resize -> 256x256
+                cropped_images.append(an_image)
+                # resize -> 256x256
+                resized_images.append(cv2.resize(an_image, (256, 256)))
+
+        resized_images = np.array(resized_images)
+        # 保存数据文件
+        np.savez(
+            os.path.join(save_folder, f"JPG_{index}"),
+            data=resized_images,
+            label=label,
+        )
+        # 保存图片
+        for i in range(16):
+            cv2.imwrite(
+                os.path.join(save_folder, "images", f"JPG_{index}_{i:0>2}.jpg"),
+                resized_images[i],
+            )
+
+
+# 处理骨三相 DICOM 格式文件
+def DICOM_process(
+    filelist: List[str],
+    infomation: list,
+    data_folders: List[str],
+    use_mask: bool = False,
+):
+    for file in filelist:
+        index = os.path.basename(os.path.dirname(file))
+        info = infomation[int(index) - 1]
+        label = info[1]
+        pixel_value = get_pixel_value(file)
+        flow_pool = pixel_value[0:25]
+
+        flow_pool_ = deepcopy(flow_pool)
+        images = 255 - normalize(flow_pool_) * 255
+
+        # 判断是否存在mask, 进行相应的处理操作
+        if use_mask:
+            # 是否存在对应的 mask
+            mask_file = os.path.join(os.path.dirname(file), "mask.nii.gz")
+            if not os.path.exists(mask_file):
+                continue
+            # 获取 mask 进行相应操作
+            mask = get_pixel_value(mask_file)[24]
+            # 保存数据文件
+            save_folder = data_folders[2]
+            np.savez(
+                os.path.join(save_folder, f"DCM_{index}"),
+                data=flow_pool,
+                label=label,
+            )
+            # 绘制 mask 的轮廓到原图像中，仅绘制血池相的最后一张
+            contours, hierarchy = cv2.findContours(
+                mask.astype(np.uint8),
+                cv2.RETR_LIST,
+                cv2.CHAIN_APPROX_NONE,
+            )
+            masked_image = deepcopy(images[24])
+            masked_image = np.repeat(masked_image[:, :, np.newaxis], 3, 2)
+            cv2.drawContours(masked_image, contours, -1, (0, 0, 255), 1)
+            cv2.imwrite(
+                os.path.join(save_folder, "images", f"DCM_{index}_mask.jpg"),
+                masked_image,
+            )
+        else:
+            save_folder = data_folders[1] if info[2] == "髋" else data_folders[0]
+            np.savez(
+                os.path.join(save_folder, f"DCM_{index}"), data=flow_pool, label=label
+            )
+        # 保存图片
+        for i in range(25):
+            cv2.imwrite(
+                os.path.join(save_folder, "images", f"DCM_{index}_{i:0>2}.jpg"),
+                images[i],
+            )
+
+
+def DICOM_process_with_ROI(roi_filelist: List[str], infomation: list, data_folders):
+    save_folder = data_folders[3]
+    labels = []
+    sum_normal_left, sum_normal_right = (
+        np.zeros((25, 40, 40), dtype=np.float32),
+        np.zeros((25, 40, 40), dtype=np.float32),
+    )
+    num_normal_left, num_normal_right = 0, 0
+    i = -1
+    for roi in roi_filelist:
+        i += 1
+        info = infomation[i]
+        folder_name = os.path.dirname(roi)
+        index = os.path.basename(folder_name)
+        while int(index) != info[0]:
+            i += 1
+            info = infomation[i]
+        file = os.path.join(folder_name, f"{index}_FLOW.dcm")
+        print(f"===> 正在处理 {folder_name} 文件夹下的文件")
+        f = get_pixel_value(file)
+        r = get_pixel_value(roi)[24]
+        contours, hierarchy = cv2.findContours(
+            r.astype(np.uint8),
+            cv2.RETR_LIST,
+            cv2.CHAIN_APPROX_NONE,
+        )
+        if len(contours) != 2:
+            print(f"====> 当前文件没有 2 个分割轮廓, 跳过.")
+            continue
+
+        upper1, lower1, left1, right1 = get_mask_boundary(np.squeeze(contours[0]))
+        upper2, lower2, left2, right2 = get_mask_boundary(np.squeeze(contours[1]))
+
+        # first_right = True, contour[0] -> R, contour[1] -> L
+        # first_right = False, contour[0] -> L, contour[1] -> R
+        first_right = True if left1 < left2 else False
+        # label: 0 -> 正常, 1 -> 置换手术后非感染, 2 -> 置换手术后感染
+        r_label, l_label = -1, -1
+        if info[1] == 0:  # 非感染
+            if info[2] == "L":  # L 侧置换手术
+                r_label, l_label = 0, 1
+            elif info[2] == "R":  # R 侧置换手术
+                r_label, l_label = 1, 0
+            elif info[2] == "D":  # 双侧置换手术
+                r_label, l_label = 1, 1
+        elif info[1] == 1:  # 感染
+            if info[2] == "L":  # L 侧置换手术
+                r_label, l_label = 0, 2
+            elif info[2] == "R":  # R 侧置换手术
+                r_label, l_label = 2, 0
+            elif info[2] == "D":  # 双侧置换手术
+                r_label, l_label = 2, 2
+            elif info[2] == "R感染L非感染":  # 双侧置换手术
+                r_label, l_label = 2, 1
+            elif info[2] == "L感染R非感染":  # 双侧置换手术
+                r_label, l_label = 1, 2
+        if l_label == -1 or r_label == -1:
+            print(f"====> 当前文件找不到对应标签, 跳过.")
+            continue
+        labels += [l_label, r_label]
+        if r_label == 0:
+            sum_normal_right += (
+                f[0:25, upper1 : lower1 + 1, left1 : right1 + 1]
+                if first_right
+                else f[0:25, upper2 : lower2 + 1, left2 : right2 + 1]
+            )
+            num_normal_right += 1
+        if l_label == 0:
+            sum_normal_left += (
+                f[0:25, upper2 : lower2 + 1, left2 : right2 + 1]
+                if first_right
+                else f[0:25, upper1 : lower1 + 1, left1 : right1 + 1]
+            )
+            num_normal_left += 1
+        r_hip_filename = os.path.join(save_folder, f"{str(index).zfill(3)}_r_{r_label}")
+        l_hip_filename = os.path.join(save_folder, f"{str(index).zfill(3)}_l_{l_label}")
+        np.savez(
+            r_hip_filename if first_right else l_hip_filename,
+            data=f[0:25],
+            label=r_label if first_right else l_label,
+            boundary=[upper1, lower1, left1, right1],
+        )
+        np.savez(
+            l_hip_filename if first_right else r_hip_filename,
+            data=f[0:25],
+            label=l_label if first_right else r_label,
+            boundary=[upper2, lower2, left2, right2],
+        )
+        # 保存图像
+        images = deepcopy(f)
+        images = 255 - normalize(images[0:25]) * 255
+        image = images[24].astype(np.uint8)
+        image = np.repeat(image[:, :, np.newaxis], repeats=3, axis=2)
+        # image = image.astype(np.uint8)
+        cv2.rectangle(image, (left1, upper1), (right1, lower1), (0, 0, 255), 1)
+        cv2.rectangle(image, (left2, upper2), (right2, lower2), (0, 0, 255), 1)
+        cv2.imwrite(
+            os.path.join(save_folder, "images", f"{index}_l_{l_label}_r_{r_label}.jpg"),
+            image,
+        )
+
+    print("各类标签样本数量: ", np.bincount(labels))
+    left_hip = sum_normal_left / num_normal_left
+    right_hip = sum_normal_right / num_normal_right
+    # 保存正常左髋和右髋的平均值
+    np.savez(os.path.join(save_folder, "normal_hip"), right=right_hip, left=left_hip)
+    print("结束!")
+
+
+# 创建文件夹
+base_folder = os.path.join(OUTPUT_FOLDER, "ThreePhaseBone")
+data_folders = [
+    os.path.join(base_folder, d) for d in ["knee", "hip", "hip_mask", "hip_roi"]
+]
+image_folders = [os.path.join(d, "images") for d in data_folders]
+mkdirs([OUTPUT_FOLDER, base_folder] + data_folders + image_folders)
 
 # 读取数据信息
-xlsx = pd.read_excel("ThreePhaseBone/ThreePhaseBone.xlsx")
-information = xlsx[["编号", "最终结果", "部位", "type"]].values
+ThreePhaseBone = pd.read_excel("ThreePhaseBone/ThreePhaseBone.xlsx")
+TB_info = ThreePhaseBone[["编号", "最终结果", "部位", "type"]].values
 
-# 输出文件路径
-knee_dir = os.path.join(OUTPUT_DIR, "knee")
-hip_dir = os.path.join(OUTPUT_DIR, "hip")
-hip_mask_dir = os.path.join(OUTPUT_DIR, "hip_mask")
-hip_roi_dir = os.path.join(OUTPUT_DIR, "hip_roi")
-mkdirs([knee_dir, hip_dir, hip_mask_dir, hip_roi_dir])
+JPG_files = glob("ThreePhaseBone/*/*/*_1.JPG")
+image_process(JPG_files, TB_info, data_folders)
 
-# JPG数据处理
-jpgs = glob("ThreePhaseBone/*/*_1.JPG")
-for jpg in jpgs:
-    index = jpg.split("\\")[-1].split("_")[0]
-    info = information[int(index) - 1]
-    save_path = os.path.join(hip_dir if info[2] == "髋" else knee_dir, index)
-    img_process(jpg, info[-1], info[1], save_path)
+DICOM_files = glob("ThreePhaseBone/*/*/*_FLOW.dcm")
+DICOM_process(DICOM_files, TB_info, data_folders)
 
-# DCM数据处理
-dcms = glob("ThreePhaseBone/*/*/*_FLOW.dcm")
-for d in dcms:
-    index = d.split("\\")[-1].split("_")[0]
-    info = information[int(index) - 1]
-    save_path = os.path.join(hip_dir if info[2] == "髋" else knee_dir, index)
-    pixel_value = get_pixel_value(d)
-    dcm_process(pixel_value, info[1], save_path)
-
-# 带有标注无关区域数据的 Hip 数据处理
-hips = glob("ThreePhaseBone/hip/*/*_FLOW.dcm")
-masks = glob("ThreePhaseBone/hip/*/mask.nii.gz")
-for d, m in zip(dcms, masks):
-    index = d.split("\\")[-1].split("_")[0]
-    info = information[int(index) - 1]
-    save_path = os.path.join(hip_mask_dir, index)
-    pixel_value = get_pixel_value(d)
-    mask_value = get_pixel_value(m)
-    dcm_process(pixel_value, info[1], save_path, mask_value)
-
+MASK_files = glob("ThreePhaseBone/hip/*/mask.nii.gz")
+DICOM_process(DICOM_files, TB_info, data_folders, True)
 
 # 带有标注髋部区域数据的 Hip 数据处理
 # label: 0 -> 正常, 1 -> 置换手术后非感染, 2 -> 置换手术后感染
-
-xlsx = pd.read_excel("ThreePhaseBone/hip_roi.xlsx")
-information = xlsx[["编号", "最终结果", "左右"]].values
-information_index = 0
-
-hips = glob("ThreePhaseBone/hip/*/*FLOW.dcm")
-masks = glob("ThreePhaseBone/hip/*/roi.nii.gz")
-labels = []
-
-normal_left_hip = []
-normal_right_hip = []
-sum_left_hip, sum_right_hip = (
-    np.zeros((25, 40, 40), dtype=np.float32),
-    np.zeros((25, 40, 40), dtype=np.float32),
-)
-
-for d, m in zip(dcms, masks):
-    d_dir = os.path.dirname(d)
-    m_dir = os.path.dirname(m)
-    print(f"===> 正在处理 {d_dir} 文件夹下的文件")
-    if d_dir != m_dir:
-        print(f"====> 骨三相文件与标签文件不匹配 {d_dir} != {m_dir}, 跳过!")
-        continue
-    index = int(m_dir.split("\\")[-1])
-
-    # 找到对应数据的信息
-    while True:
-        if information[information_index][0] == index:
-            print(f"=====> 找到当前 {d_dir} 文件夹下的文件信息 {information[information_index]}")
-            break
-        print(f"====> {information[information_index]} 编号不匹配.")
-        information_index += 1
-
-    info = information[information_index]
-    # 本次文件信息已提取，自动 information_index + 1
-    information_index += 1
-    d_value = get_pixel_value(d)
-    m_value = get_pixel_value(m)[24]
-    contours, hierarchy = cv2.findContours(
-        m_value.astype(np.uint8), cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE,
-    )
-    if len(contours) != 2:
-        print(f"====> 当前文件没有 2 个分割轮廓, 跳过.")
-        continue
-
-    upper1, lower1, left1, right1 = get_mask_boundary(np.squeeze(contours[0]))
-    upper2, lower2, left2, right2 = get_mask_boundary(np.squeeze(contours[1]))
-
-    # first_right = True, contour[0] -> R, contour[1] -> L
-    # first_right = False, contour[0] -> L, contour[1] -> R
-    first_right = True if left1 < left2 else False
-
-    # label: 0 -> 正常, 1 -> 置换手术后非感染, 2 -> 置换手术后感染
-    r_label, l_label = -1, -1
-    if info[1] == 0:  # 非感染
-        if info[2] == "L":  # L 侧置换手术
-            r_label, l_label = 0, 1
-        elif info[2] == "R":  # R 侧置换手术
-            r_label, l_label = 1, 0
-        elif info[2] == "D":  # 双侧置换手术
-            r_label, l_label = 1, 1
-    elif info[1] == 1:  # 感染
-        if info[2] == "L":  # L 侧置换手术
-            r_label, l_label = 0, 2
-        elif info[2] == "R":  # R 侧置换手术
-            r_label, l_label = 2, 0
-        elif info[2] == "D":  # 双侧置换手术
-            r_label, l_label = 2, 2
-        elif info[2] == "R感染L非感染":  # 双侧置换手术
-            r_label, l_label = 2, 1
-        elif info[2] == "L感染R非感染":  # 双侧置换手术
-            r_label, l_label = 1, 2
-    if l_label == -1 or r_label == -1:
-        print(f"====> 当前文件找不到对应标签, 跳过.")
-        continue
-
-    labels.extend([r_label, l_label])
-
-    if r_label == 0:
-        normal_right_hip.append(
-            d_value[0:25, upper1 : lower1 + 1, left1 : right1 + 1]
-            if first_right
-            else d_value[0:25, upper2 : lower2 + 1, left2 : right2 + 1]
-        )
-        sum_right_hip += (
-            d_value[0:25, upper1 : lower1 + 1, left1 : right1 + 1]
-            if first_right
-            else d_value[0:25, upper2 : lower2 + 1, left2 : right2 + 1]
-        )
-    if l_label == 0:
-        normal_left_hip.append(
-            d_value[0:25, upper2 : lower2 + 1, left2 : right2 + 1]
-            if first_right
-            else d_value[0:25, upper1 : lower1 + 1, left1 : right1 + 1]
-        )
-        sum_left_hip += (
-            d_value[0:25, upper2 : lower2 + 1, left2 : right2 + 1]
-            if first_right
-            else d_value[0:25, upper1 : lower1 + 1, left1 : right1 + 1]
-        )
-    imgs = [
-        d_value[24],
-        m_value,
-    ]
-    r_hip_filename = os.path.join(hip_roi_dir, f"{str(index).zfill(3)}_r_{r_label}")
-    l_hip_filename = os.path.join(hip_roi_dir, f"{str(index).zfill(3)}_l_{l_label}")
-    # if first_right:
-    np.savez(
-        r_hip_filename if first_right else l_hip_filename,
-        data=d_value[0:25],
-        label=r_label if first_right else l_label,
-        boundary=[upper1, lower1, left1, right1],
-    )
-    np.savez(
-        l_hip_filename if first_right else r_hip_filename,
-        data=d_value[0:25],
-        label=l_label if first_right else r_label,
-        boundary=[upper2, lower2, left2, right2],
-    )
-
-    imgs.extend(
-        [
-            d_value[24, upper1 : lower1 + 1, left1 : right1 + 1],
-            d_value[24, upper2 : lower2 + 1, left2 : right2 + 1],
-        ]
-        if first_right
-        else [
-            d_value[24, upper2 : lower2 + 1, left2 : right2 + 1],
-            d_value[24, upper1 : lower1 + 1, left1 : right1 + 1],
-        ]
-    )
-    # 保存图像
-    for i, title in enumerate(["hip", "mask", f"right {r_label}", f"left {l_label}"]):
-        plt.subplot(2, 2, i + 1)
-        plt.title(title)
-        plt.imshow(imgs[i], plt.cm.binary)
-        plt.axis("off")
-    plt.savefig(os.path.join(hip_roi_dir, str(index).zfill(3)))
-    plt.close()
-
-print("各类标签样本数量: ", np.bincount(labels))
-right_hip = sum_right_hip / len(normal_right_hip)
-left_hip = sum_left_hip / len(normal_left_hip)
-# 保存正常左髋和右髋的平均值
-np.savez(os.path.join(hip_roi_dir, "normal_hip"), right=right_hip, left=left_hip)
-print("结束!")
+# Hip_ROI = pd.read_excel("ThreePhaseBone/hip_roi.xlsx")
+# Hip_ROI_info = Hip_ROI[["编号", "最终结果", "左右"]].values
+# ROI_files = glob("ThreePhaseBone/hip/*/roi.nii.gz")
+# DICOM_process_with_ROI(ROI_files, Hip_ROI_info, data_folders)

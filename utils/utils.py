@@ -3,9 +3,15 @@ import os
 import stat
 
 import numpy as np
+from matplotlib import pyplot as plt
 from sklearn.metrics import confusion_matrix
 
 
+# 常量
+OUTPUT_FOLDER = "./Files"
+
+
+# 工具
 def mkdir(dir):
     if not os.path.exists(dir):
         os.mkdir(dir)
@@ -67,13 +73,27 @@ def classification_metrics(ground_truth, predicted_classes):
     npv = tn / (tn + fn)
     if binary:
         metric_infomation = (
-            "[Accuracy] {0:.2%}({1}/{2}) ".format(accuracy, tn + tp, tn + fp + fn + tp,)
-            + "[Specificity] {0:.2%}({1}/{2}) ".format(specificity, tn, tn + fp,)
-            + "[Sensitivity] {0:.2%}({1}/{2}) ".format(sensitivity, tp, tp + fn,)
+            "[Accuracy] {0:.2%}({1}/{2}) ".format(
+                accuracy,
+                tn + tp,
+                tn + fp + fn + tp,
+            )
+            + "[Specificity] {0:.2%}({1}/{2}) ".format(
+                specificity,
+                tn,
+                tn + fp,
+            )
+            + "[Sensitivity] {0:.2%}({1}/{2}) ".format(
+                sensitivity,
+                tp,
+                tp + fn,
+            )
             + "[F1 Score] {:.4f} ".format(f1)
             + "[PPV] {0:.2%}({1}/{2}) ".format(ppv, tp, tp + fp)
             + "[NPV] {0:.2%}({1}/{2}) ".format(npv, tn, tn + fn)
-            + "[Confusion Matrix] {0}".format([tn, fp, fn, tp],)
+            + "[Confusion Matrix] {0}".format(
+                [tn, fp, fn, tp],
+            )
         )
     else:
         metric_infomation = (
