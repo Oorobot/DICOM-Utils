@@ -1,16 +1,16 @@
 # 文件夹
 *__pycache__
-/PET-CT
-/ThreePhaseBone
+/Data
 /Files
-/TPB
 
 # 文件
-*.dcm
-*.txt
 *.csv
-*.png
-*.json
-*.zip
+*.dcm
 *.jpg
+*.JPG
+*.json
+*.nii.gz
 *.npz
+*.png
+*.txt
+*.zip

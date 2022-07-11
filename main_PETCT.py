@@ -134,8 +134,8 @@ def get_resampled_SUVbw_from_PETCT(
 """ series images的顺序是从肺部上面到下面, .nii.gz的顺序恰好相反, 从下面到上面."""
 
 # 常量
-SEGMENTATION_FILES = glob("PET-CT/*/*.nii.gz")
-LUNG_SLICE = pd.read_excel("PET-CT/PET-CT.xlsx", "Sheet1")[
+SEGMENTATION_FILES = glob("Data/PET-CT/*/*.nii.gz")
+LUNG_SLICE = pd.read_excel("Data/PET-CT/PET-CT.xlsx", "Sheet1")[
     ["肺部切片第一张", "肺部切片最后一张"]
 ].values
 
@@ -143,14 +143,13 @@ LUNG_SLICE = pd.read_excel("PET-CT/PET-CT.xlsx", "Sheet1")[
 data_folder = os.path.join(OUTPUT_FOLDER, "PETCT")
 image_folder = os.path.join(OUTPUT_FOLDER, "PETCT", "images")
 mkdirs([OUTPUT_FOLDER, data_folder, image_folder])
-
 # reg 数据处理
 for segmentation_file in SEGMENTATION_FILES:
     print("now start process file: ", segmentation_file)
 
     # 获取当前文件夹和上一级文件夹名
     segmentation_file_dir = os.path.dirname(segmentation_file)
-    dir_name = segmentation_file_dir.split("\\")[-1]
+    dir_name = os.path.basename(segmentation_file_dir)
 
     # 肺部切片
     slice_start, slice_end = LUNG_SLICE[int(dir_name) - 1]

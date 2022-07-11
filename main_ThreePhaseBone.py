@@ -293,21 +293,21 @@ image_folders = [os.path.join(d, "images") for d in data_folders]
 mkdirs([OUTPUT_FOLDER, base_folder] + data_folders + image_folders)
 
 # 读取数据信息
-ThreePhaseBone = pd.read_excel("ThreePhaseBone/ThreePhaseBone.xlsx")
+ThreePhaseBone = pd.read_excel("Data/ThreePhaseBone/ThreePhaseBone.xlsx")
 TB_info = ThreePhaseBone[["编号", "最终结果", "部位", "type"]].values
 
-JPG_files = glob("ThreePhaseBone/*/*/*_1.JPG")
+JPG_files = glob("Data/ThreePhaseBone/*/*/*_1.JPG")
 image_process(JPG_files, TB_info, data_folders)
 
-DICOM_files = glob("ThreePhaseBone/*/*/*_FLOW.dcm")
+DICOM_files = glob("Data/ThreePhaseBone/*/*/*_FLOW.dcm")
 DICOM_process(DICOM_files, TB_info, data_folders)
 
-MASK_files = glob("ThreePhaseBone/hip/*/mask.nii.gz")
+MASK_files = glob("Data/ThreePhaseBone/hip/*/mask.nii.gz")
 DICOM_process(DICOM_files, TB_info, data_folders, True)
 
 # 带有标注髋部区域数据的 Hip 数据处理
 # label: 0 -> 正常, 1 -> 置换手术后非感染, 2 -> 置换手术后感染
-# Hip_ROI = pd.read_excel("ThreePhaseBone/hip_roi.xlsx")
+# Hip_ROI = pd.read_excel("Data/ThreePhaseBone/hip_roi.xlsx")
 # Hip_ROI_info = Hip_ROI[["编号", "最终结果", "左右"]].values
-# ROI_files = glob("ThreePhaseBone/hip/*/roi.nii.gz")
+# ROI_files = glob("Data/ThreePhaseBone/hip/*/roi.nii.gz")
 # DICOM_process_with_ROI(ROI_files, Hip_ROI_info, data_folders)
