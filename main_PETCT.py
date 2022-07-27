@@ -280,11 +280,12 @@ for segmentation_file in SEGMENTATION_FILES:
                         data_folder,
                         f"{dir_name}_{current_CT_filename}_{str(idx).zfill(2)}",
                     ),
-                    HU=cropped_HU,
-                    segmentation=cropped_segmentation_only_one,
-                    max=SUVbw_max,
-                    mean=SUVbw_mean,
-                    min=SUVbw_min,
+                    hounsfield_unit=cropped_HU,
+                    mask=cropped_segmentation,
+                    mask_=cropped_segmentation_only_one,
+                    SUVmax=SUVbw_max,
+                    SUVmean=SUVbw_mean,
+                    SUVmin=SUVbw_min,
                 )
 
                 # 保存图像文件
