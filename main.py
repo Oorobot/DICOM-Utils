@@ -75,24 +75,24 @@ import numpy as np
 ######################################################
 
 
-z = np.load("Files/PETCT/001_CT131_00.npz")
+# z = np.load("Files/PETCT/001_CT131_00.npz")
 
 
-def normalize(hu: np.ndarray):
-    hu = np.clip(hu, -1000, 1000)
-    hu = hu / 2000 + 0.5
-    return hu
+# def normalize(hu: np.ndarray):
+#     hu = np.clip(hu, -1000, 1000)
+#     hu = hu / 2000 + 0.5
+#     return hu
 
 
-image1 = normalize(z["HU"])
-image2 = np.flip(image1, 0)
-image3 = np.flip(image1, 1)
-image4 = np.flip(image2, 1)
-cv2.imshow("img", image1)
-cv2.waitKey()
-cv2.imshow("img", image2)
-cv2.waitKey()
-cv2.imshow("img", image3)
-cv2.waitKey()
-cv2.imshow("img", image4)
-cv2.waitKey()
+# image1 = normalize(z["HU"])
+# image2 = np.flip(image1, 0)
+# image3 = np.flip(image1, 1)
+# image4 = np.flip(image2, 1)
+# cv2.imshow("img", image1)
+# cv2.waitKey()
+# cv2.imshow("img", image2)
+# cv2.waitKey()
+# cv2.imshow("img", image3)
+# cv2.waitKey()
+# cv2.imshow("img", image4)
+# cv2.waitKey()

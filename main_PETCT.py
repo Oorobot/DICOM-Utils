@@ -140,8 +140,8 @@ LUNG_SLICE = pd.read_excel("Data/PET-CT/PET-CT.xlsx", "Sheet1")[
 ].values
 
 # 输出文件路径
-data_folder = os.path.join(OUTPUT_FOLDER, "PETCT")
-image_folder = os.path.join(OUTPUT_FOLDER, "PETCT", "images")
+data_folder = os.path.join(OUTPUT_FOLDER, "PETCT_")
+image_folder = os.path.join(OUTPUT_FOLDER, "PETCT_", "images")
 mkdirs([OUTPUT_FOLDER, data_folder, image_folder])
 # reg 数据处理
 for segmentation_file in SEGMENTATION_FILES:
@@ -224,6 +224,28 @@ for segmentation_file in SEGMENTATION_FILES:
                 current_HU_img,
                 [int(cv2.IMWRITE_JPEG_QUALITY), 100],
             )
+
+            masked_SUVbw = np.ma.masked_where(
+                current_segmaentation_array == 0, current_SUVbw
+            )
+            SUVbw_max = np.max(masked_SUVbw)
+            SUVbw_min = np.min(masked_SUVbw)
+            SUVbw_mean = np.mean(masked_SUVbw)
+
+            # 每张CT及其标注图以及CT图中存在的病灶中所有的SUVmax, SUVmin, SUVmean
+            np.savez(
+                os.path.join(
+                    data_folder,
+                    f"{dir_name}_{current_CT_filename}",
+                ),
+                hounsfield_unit=current_HU,
+                mask=current_segmaentation_array,
+                SUVmax=SUVbw_max,
+                SUVmean=SUVbw_mean,
+                SUVmin=SUVbw_min,
+            )
+            if True:
+                continue
 
             # 处理每个病灶
             for idx, contour in enumerate(contours):
