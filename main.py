@@ -1,13 +1,17 @@
+import os
+import shutil
+
 import cv2
-from mlxtend.evaluate import mcnemar, mcnemar_table
-import pandas as pd
+import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
+from mlxtend.evaluate import mcnemar, mcnemar_table
+from utils.dicom import get_patient_info
 
+from utils.metric import classification_metrics
+from utils.utils import load_json, to_pinyin
 
-############################################################
-### 独立验证集，提出的最佳模型与医生进行比较，计算显著性水平p ###
-############################################################
-
+"""独立验证集, 提出的最佳模型与医生进行比较, 计算显著性水平p"""
 # knee_ = pd.read_csv("Files/dicom/knee.csv")
 # hip_ = pd.read_csv("Files/dicom/hip.csv")
 # knee_label = knee_["label"].values
@@ -35,13 +39,8 @@ import numpy as np
 #         chi2, p = mcnemar(tb)
 #         print("{}\t{}\t{:.4f}\t{:.4f}".format(fold, doctor, p, chi2))
 
-#############################################
-### 独立验证集，制表给医生评估，计算分类指标 ###
-#############################################
-# from utils.tool import load_json, classification_metrics
-# import pandas as pd
-# import numpy as np
 
+"""独立验证集, 制表给医生评估, 计算分类指标"""
 # knee_ = pd.read_csv("Files/dicom/knee.csv")
 # hip_ = pd.read_csv("Files/dicom/hip.csv")
 # knee_label = knee_["label"].values
@@ -70,11 +69,7 @@ import numpy as np
 #     )
 
 
-######################################################
-### 使用镜像的方式将 SUVmax > 2.5 的数据扩展至原来的四倍
-######################################################
-
-
+""" 使用镜像的方式将 SUVmax > 2.5 的数据扩展至原来的四倍"""
 # z = np.load("Files/PETCT/001_CT131_00.npz")
 
 
@@ -96,3 +91,211 @@ import numpy as np
 # cv2.waitKey()
 # cv2.imshow("img", image4)
 # cv2.waitKey()
+
+
+"""统计已有的PET-FRI的病人信息"""
+# base_path = "Data/PET-FRI&TPB-CT/PET-FRI/NormalData"
+# PET_FRI_dirs = os.listdir(base_path)
+
+# PET_FRI = pd.read_excel("Data/PET-FRI&TPB-CT/PET-FRI/PET-FRI.xlsx", "FRI")
+# num = 0
+# num_female = 0
+# num_male = 0
+# age = []
+# num_infection = 0
+# num_noninfection = 0
+# for dir in PET_FRI_dirs:
+#     no = int(dir[0:3])
+#     # path = os.path.join(base_path, dir)
+#     query_info = PET_FRI.query(f"No=={int(dir[:3])}")
+#     age.append(int(query_info["Age"].values[0]))
+#     gender = query_info["Gender"].values
+#     if gender[0] == "Female":
+#         num_female = num_female + 1
+#     else:
+#         num_male = num_male + 1
+#     if query_info["Final_diagnosis"].values[0] == "T":
+#         num_infection = num_infection + 1
+#     else:
+#         num_noninfection = num_noninfection + 1
+
+#     num += 1
+
+# print(
+#     "num: ",
+#     num,
+#     ",num_female: ",
+#     num_female,
+#     num_female / num,
+#     ",num_male: ",
+#     num_male,
+#     num_male / num,
+#     ",num_infection: ",
+#     num_infection,
+#     num_infection / num,
+#     ",num_noninfection: ",
+#     num_noninfection,
+#     num_noninfection / num,
+# )
+# print("age", np.mean(age), np.max(age), np.min(age))
+
+
+"""统计PET-CT中存在肺结节标注的病人信息"""
+# SEGMENTATION_FILES = glob("Data/PET-CT/*/*.nii.gz")
+# LUNG_SLICE = pd.read_excel("Data/PET-CT/PET-CT.xlsx", "Sheet1")
+
+
+# files = glob("Files/PETCT/*.npz")
+# no_list = [int(os.path.basename(f)[0:3]) for f in files]
+# no_list = list(set(no_list))
+# result = LUNG_SLICE.query("编号 in @no_list")
+# ## 统计男女个数，以及平均年龄
+# age = result["年龄"].values
+# age = [int(a[0:-2]) for a in age]
+# print("【年龄】平均值: ", np.mean(age), " 最小值: ", np.min(age), " 最大值: ", np.max(age))
+# sex = result["性别"].value_counts()
+# print("【性别】", sex)
+
+
+"""绘制PET-CT中 SUVmax, SUVmean, SUVmin 直方图"""
+# plt.figure(figsize=(19.2, 10.8), dpi=100)
+# files = glob("Files/PETCT/*.npz")
+# suvmax = []
+# suvmean = []
+# suvmin = []
+# for file in files:
+#     data = np.load(file)
+#     suvmax.append(data["SUVmax"])
+#     suvmean.append(data["SUVmean"])
+#     suvmin.append(data["SUVmin"])
+# bins = [0, 1, 2, 3, 4, 5, 10, 20, 30, 50, 70]
+# height = [np.histogram(suv, bins)[0] for suv in [suvmax, suvmean, suvmin]]
+# left, n = np.arange(len(bins) - 1), len(height)
+# ax = plt.subplot(111)
+# colors = ["#63b2ee", "#76da91", "#f8cb7f"]
+# labels = ["SUVmax", "SUVmean", "SUVmin"]
+# # colors = ax._get_lines.color_cycle
+# for j, h in enumerate(height):
+#     b = ax.bar(
+#         left + (j + 0.5) * 1.0 / n, h, width=1.0 / n, color=colors[j], label=labels[j]
+#     )
+#     ax.bar_label(b)
+#     # for a, b in zip(left + (j + 0.5) * 1.0 / n, h):
+#     #     ax.text(a, b + 1, b, ha="center", va="bottom")
+# ax.legend()
+# ax.set_xticks(np.arange(0, len(bins)))
+# ax.set_xticklabels(map(str, bins))
+# ax.set_ylabel("Number")
+# ax.set_xlabel("Standard Update Value")
+# plt.show()
+
+
+"""将骨三相CT中的存在缺失数据的文件夹和问题数据移至 problem_data 中"""
+
+# TPB_CT = "F:\\ThreePhaseBone-CT\\data"
+# TPB_CT_ = "F:\\ThreePhaseBone-CT\\problem_data"
+
+# sub_dirs = os.listdir(TPB_CT)
+
+# for sub_dir in sub_dirs:
+#     sub_path = os.path.join(TPB_CT, sub_dir)
+#     sub_sub_dirs = os.listdir(sub_path)
+#     if len(sub_sub_dirs) == 0:
+#         shutil.move(sub_path, os.path.join(TPB_CT_, sub_dir))
+#     else:
+#         sub_sub_dir = os.path.join(sub_path, "3.75")
+#         if not os.listdir(sub_sub_dir):
+#             shutil.move(sub_path, os.path.join(TPB_CT_, sub_dir))
+
+
+# problem_data_info = pd.read_excel("F:\\ThreePhaseBone-CT\\问题数据.xlsx")
+# dir_name = problem_data_info["编号"][0:39]
+# for d in dir_name:
+#     src = os.path.join(TPB_CT, str(d))
+#     if os.path.exists(src):
+#         shutil.move(src, os.path.join(TPB_CT_, str(d)))
+
+
+"""PET-FRI 找出问题数据和存在缺失的数据"""
+# PET_FRI = "Data/PET-FRI/数据"
+# PET_FRI_ = "Data/PET-FRI/问题数据"
+# problem_data_info = pd.read_excel("Data/PET-FRI/PET-FRI问题数据.xlsx")
+# dir_name = problem_data_info["No"]
+# for d in dir_name:
+#     src = os.path.join(PET_FRI, str(d))
+#     if os.path.exists(src):
+#         shutil.move(src, os.path.join(PET_FRI_, str(d)))
+# PET_FRI = "Data/PET-FRI/数据"
+# PET_FRI_ = "Data/PET-FRI/问题数据"
+# sub_dirs = os.listdir(PET_FRI)
+# for sub_dir in sub_dirs:
+#     sub_path = os.path.join(PET_FRI, sub_dir)
+#     # 查看每个病人下的CT或PET是否为空
+#     sub_sub_dirs = os.listdir(sub_path)
+#     for sub_sub_dir in sub_sub_dirs:
+#         sub_sub_path = os.path.join(sub_path, sub_sub_dir)
+#         if os.path.isdir(sub_sub_path) and not os.listdir(sub_sub_path):
+#             shutil.move(sub_path, os.path.join(PET_FRI_, sub_dir))
+#             print(sub_path)
+#             break
+
+
+"""读取PET-FRI和TPB-CT中文件夹名、检查日期、病人姓名"""
+# PET_FRI = "Data/PET-FRI/数据"
+# patient_info = pd.read_excel("Data/PET-FRI/PET-FRI.xlsx", "FRI")
+
+
+TPB_CT = "Data/ThreePhaseBone-CT/问题数据"
+patient_info = pd.read_excel("Data/ThreePhaseBone/ThreePhaseBone.xlsx")
+
+dirs = os.listdir(TPB_CT)
+xlxs = pd.DataFrame(
+    columns=[
+        "No",
+        "Folder",
+        "Datetime",
+        "Name",
+        "Sex",
+        "NameFromExcel",
+        "SexFromExcel",
+        "NameToPinyin",
+        "TimeFromExcel",
+    ]
+)
+i = 1
+for dir in dirs:
+    # 每个病人的数据, 子文件夹 CT、PET 中读取一个文件，主文件下读取所有文件
+    print(f"编号: {dir:>3}")
+    patient_dir = os.path.join(TPB_CT, dir)
+    sub_dirs = os.listdir(patient_dir)
+    for sub_dir in sub_dirs:
+        patient_sub_dir = os.path.join(patient_dir, sub_dir)
+        if os.path.isdir(patient_sub_dir):
+            filenames = os.listdir(patient_sub_dir)
+            if len(filenames) == 0:
+                continue
+            dicom_filename = os.path.join(patient_sub_dir, filenames[0])
+            information = get_patient_info(dicom_filename)
+        else:
+            # 仅查看PET或者CT的文件中的信息
+            continue
+
+        # query_info = patient_info.query(f"No=={int(dir[:3])}")
+        # info = query_info[["Name", "Gender"]].values
+        query_info = patient_info.query(f"编号=={int(dir[:3])}")
+        info = query_info[["姓名", "性别", "检查日期"]].values
+        pinyin = to_pinyin(info[0][0])
+        xlxs.loc[i] = [
+            dir,
+            sub_dir,
+            information["Acquisition Date"],
+            information["Patient Name"],
+            information["Patient Sex"],
+            info[0][0],
+            info[0][1],
+            pinyin,
+            info[0][2],
+        ]
+        i = i + 1
+
+xlxs.to_excel(TPB_CT + ".xlsx", "Sheet1", index=False)

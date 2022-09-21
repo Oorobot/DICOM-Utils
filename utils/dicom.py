@@ -24,32 +24,6 @@ def get_pixel_value(filename: str):
     return sitk.GetArrayFromImage(sitk.ReadImage(filename))
 
 
-def read_serises_image(files: List[str]) -> sitk.Image:
-    reader = sitk.ImageSeriesReader()
-    reader.SetFileNames(files)
-    images = reader.Execute()
-    return images
-
-
-def dicom2image(
-    pixel_value: np.ndarray,
-    window_center: float,
-    window_width: float,
-    ratio=1.0,
-    to_uint8=False,
-):
-    if ratio != 1.0:
-        window_width *= ratio
-        window_center *= ratio
-
-    min_window = window_center - window_width * 0.5
-    gray_image = (pixel_value - min_window) / float(window_width)
-    np.clip(gray_image, 0, 1, out=gray_image)
-    if to_uint8:
-        gray_image = (gray_image * 255).astype(np.uint8)
-    return gray_image
-
-
 # CT(DCM格式文件): 获取 Hounsfield Unit 矩阵.
 def get_hounsfield_unit(filename: str) -> np.ndarray:
     """根据 CT tag 信息, 计算每个像素值的 hounsfield unit = pixel_array * RescaleSlope + RescaleIntercept"""
@@ -205,6 +179,13 @@ DICOM_TAG = {
 }
 
 
+def read_serises_image(files: List[str]) -> sitk.Image:
+    reader = sitk.ImageSeriesReader()
+    reader.SetFileNames(files)
+    images = reader.Execute()
+    return images
+
+
 def get_patient_info(filename: str):
     file = pydicom.dcmread(filename)
     information = {}
@@ -215,3 +196,18 @@ def get_patient_info(filename: str):
             print(f"{value} is not exist")
             information[value] = None
     return information
+
+
+def ct2image(
+    pixel_value: np.ndarray,
+    window_center: float,
+    window_width: float,
+    to_uint8: bool = False,
+):
+    window_min = window_center - window_width * 0.5
+    window_max = window_center + window_width * 0.5
+    np.clip(pixel_value, window_min, window_max, pixel_value)
+    image = (pixel_value - window_min) / window_width
+    if to_uint8:
+        image = (image * 255).astype(np.uint8)
+    return image

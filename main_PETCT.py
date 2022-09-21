@@ -8,14 +8,8 @@ import numpy as np
 import pandas as pd
 import SimpleITK as sitk
 
-from utils.dicom import get_SUVbw_in_GE, read_serises_image
+from utils.dicom import get_SUVbw_in_GE, ct2image
 from utils.utils import OUTPUT_FOLDER, mkdirs
-
-
-def normalize(hu: np.ndarray):
-    hu = np.clip(hu, -1000, 1000)
-    hu = hu / 2000 + 0.5
-    return hu
 
 
 def crop_based_lesions(
@@ -205,7 +199,7 @@ for segmentation_file in SEGMENTATION_FILES:
             # 获取当前的HU和SUVbw
             current_HU = lung_HU[i]
             current_HU_img = copy.deepcopy(current_HU)
-            current_HU_img = normalize(current_HU_img) * 255
+            current_HU_img = ct2image(current_HU_img, 0, 2000, True)
             # current_HU_img = current_HU_img[:, :, np.newaxis]
             # current_HU_img = np.repeat(current_HU_img, repeats=3, axis=2)
             current_SUVbw = lung_SUVbw[i]
@@ -316,7 +310,7 @@ for segmentation_file in SEGMENTATION_FILES:
                         image_folder,
                         f"{dir_name}_{current_CT_filename}_{str(idx).zfill(2)}_img.jpg",
                     ),
-                    normalize(copy.deepcopy(cropped_HU)) * 255,
+                    ct2image(copy.deepcopy(cropped_HU), 0, 2000, True),
                     [int(cv2.IMWRITE_JPEG_QUALITY), 100],
                 )
                 cv2.imwrite(
