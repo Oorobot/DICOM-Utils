@@ -6,7 +6,7 @@ import pydicom
 import SimpleITK as sitk
 
 
-def string_to_datetime(time: str) -> datetime:
+def string2datetime(time: str) -> datetime:
     """转换字符串(format: %Y%m%d%H%M%S or %Y%m%d%H%M%S.%f)为 datetime 类型数据"""
     try:
         date_time = datetime.strptime(time, "%Y%m%d%H%M%S")
@@ -31,7 +31,7 @@ def read_serises_image(files: List[str]) -> sitk.Image:
     return images
 
 
-def convert_dicom_to_gary_image_based_window_center_and_window_width(
+def dicom2image(
     pixel_value: np.ndarray,
     window_center: float,
     window_width: float,
@@ -93,7 +93,7 @@ def get_SUVbw(pixel_value: np.ndarray, file: str) -> np.ndarray:
                 )
 
             decay_time = (
-                string_to_datetime(scan_datetime) - string_to_datetime(start_datetime)
+                string2datetime(scan_datetime) - string2datetime(start_datetime)
             ).total_seconds()
 
             injected_dose = float(
@@ -117,8 +117,8 @@ def get_SUVbw_in_GE(pixel_value: np.ndarray, file: str) -> np.ndarray:
     image = pydicom.dcmread(file)
     bw = image.PatientWeight * 1000  # g
     decay_time = (
-        string_to_datetime(image.SeriesDate + image.SeriesTime)
-        - string_to_datetime(
+        string2datetime(image.SeriesDate + image.SeriesTime)
+        - string2datetime(
             image.SeriesDate
             + image.RadiopharmaceuticalInformationSequence[
                 0
@@ -165,8 +165,8 @@ def get_all_SUV_in_GE(
         )
 
     decay_time = (
-        string_to_datetime(image.SeriesDate + image.SeriesTime)
-        - string_to_datetime(
+        string2datetime(image.SeriesDate + image.SeriesTime)
+        - string2datetime(
             image.SeriesDate
             + image.RadiopharmaceuticalInformationSequence[
                 0
@@ -190,3 +190,28 @@ def get_all_SUV_in_GE(
     SUVbsa = pixel_value * bsa / actual_activity  # cm2/ml
     SUVlbm = pixel_value * lbm * 1000 / actual_activity  # g/ml
     return SUVbw, SUVbsa, SUVlbm
+
+
+DICOM_TAG = {
+    0x00100010: "Patient Name",
+    0x00100020: "Patient ID",
+    0x00100040: "Patient Sex",
+    0x00080022: "Acquisition Date",
+    0x00080080: "Institution Name",
+    0x00080081: "Institution Adresss",
+    0x00080070: "Manufacturer",
+    0x00081010: "Station Name",
+    0x00081090: "Manufacturer Model Name",
+}
+
+
+def get_patient_info(filename: str):
+    file = pydicom.dcmread(filename)
+    information = {}
+    for key, value in DICOM_TAG.items():
+        try:
+            information[value] = file[key].value
+        except:
+            print(f"{value} is not exist")
+            information[value] = None
+    return information
