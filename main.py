@@ -1,15 +1,18 @@
 import os
 import shutil
+from glob import glob
 
 import cv2
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import pydicom
+import SimpleITK as sitk
 from mlxtend.evaluate import mcnemar, mcnemar_table
-from utils.dicom import get_patient_info
 
+from utils.dicom import get_patient_info, get_SUVbw_in_GE, read_serises_image
 from utils.metric import classification_metrics
-from utils.utils import load_json, to_pinyin
+from utils.utils import load_json, mkdir, save_json, to_pinyin
 
 """独立验证集, 提出的最佳模型与医生进行比较, 计算显著性水平p"""
 # knee_ = pd.read_csv("Files/dicom/knee.csv")
@@ -159,7 +162,7 @@ from utils.utils import load_json, to_pinyin
 
 """绘制PET-CT中 SUVmax, SUVmean, SUVmin 直方图"""
 # plt.figure(figsize=(19.2, 10.8), dpi=100)
-# files = glob("Files/PETCT/*.npz")
+# files = glob("Files/PETCT_20221001/*.npz")
 # suvmax = []
 # suvmean = []
 # suvmin = []
@@ -245,57 +248,176 @@ from utils.utils import load_json, to_pinyin
 # patient_info = pd.read_excel("Data/PET-FRI/PET-FRI.xlsx", "FRI")
 
 
-TPB_CT = "Data/ThreePhaseBone-CT/问题数据"
-patient_info = pd.read_excel("Data/ThreePhaseBone/ThreePhaseBone.xlsx")
+# TPB_CT = "Data/ThreePhaseBone-CT/问题数据"
+# patient_info = pd.read_excel("Data/ThreePhaseBone/ThreePhaseBone.xlsx")
 
-dirs = os.listdir(TPB_CT)
-xlxs = pd.DataFrame(
-    columns=[
-        "No",
-        "Folder",
-        "Datetime",
-        "Name",
-        "Sex",
-        "NameFromExcel",
-        "SexFromExcel",
-        "NameToPinyin",
-        "TimeFromExcel",
-    ]
-)
-i = 1
-for dir in dirs:
-    # 每个病人的数据, 子文件夹 CT、PET 中读取一个文件，主文件下读取所有文件
-    print(f"编号: {dir:>3}")
-    patient_dir = os.path.join(TPB_CT, dir)
-    sub_dirs = os.listdir(patient_dir)
-    for sub_dir in sub_dirs:
-        patient_sub_dir = os.path.join(patient_dir, sub_dir)
-        if os.path.isdir(patient_sub_dir):
-            filenames = os.listdir(patient_sub_dir)
-            if len(filenames) == 0:
-                continue
-            dicom_filename = os.path.join(patient_sub_dir, filenames[0])
-            information = get_patient_info(dicom_filename)
-        else:
-            # 仅查看PET或者CT的文件中的信息
-            continue
+# dirs = os.listdir(TPB_CT)
+# xlxs = pd.DataFrame(
+#     columns=[
+#         "No",
+#         "Folder",
+#         "Datetime",
+#         "Name",
+#         "Sex",
+#         "NameFromExcel",
+#         "SexFromExcel",
+#         "NameToPinyin",
+#         "TimeFromExcel",
+#     ]
+# )
+# i = 1
+# for dir in dirs:
+#     # 每个病人的数据, 子文件夹 CT、PET 中读取一个文件，主文件下读取所有文件
+#     print(f"编号: {dir:>3}")
+#     patient_dir = os.path.join(TPB_CT, dir)
+#     sub_dirs = os.listdir(patient_dir)
+#     for sub_dir in sub_dirs:
+#         patient_sub_dir = os.path.join(patient_dir, sub_dir)
+#         if os.path.isdir(patient_sub_dir):
+#             filenames = os.listdir(patient_sub_dir)
+#             if len(filenames) == 0:
+#                 continue
+#             dicom_filename = os.path.join(patient_sub_dir, filenames[0])
+#             information = get_patient_info(dicom_filename)
+#         else:
+#             # 仅查看PET或者CT的文件中的信息
+#             continue
 
-        # query_info = patient_info.query(f"No=={int(dir[:3])}")
-        # info = query_info[["Name", "Gender"]].values
-        query_info = patient_info.query(f"编号=={int(dir[:3])}")
-        info = query_info[["姓名", "性别", "检查日期"]].values
-        pinyin = to_pinyin(info[0][0])
-        xlxs.loc[i] = [
-            dir,
-            sub_dir,
-            information["Acquisition Date"],
-            information["Patient Name"],
-            information["Patient Sex"],
-            info[0][0],
-            info[0][1],
-            pinyin,
-            info[0][2],
-        ]
-        i = i + 1
+#         # query_info = patient_info.query(f"No=={int(dir[:3])}")
+#         # info = query_info[["Name", "Gender"]].values
+#         query_info = patient_info.query(f"编号=={int(dir[:3])}")
+#         info = query_info[["姓名", "性别", "检查日期"]].values
+#         pinyin = to_pinyin(info[0][0])
+#         xlxs.loc[i] = [
+#             dir,
+#             sub_dir,
+#             information["Acquisition Date"],
+#             information["Patient Name"],
+#             information["Patient Sex"],
+#             info[0][0],
+#             info[0][1],
+#             pinyin,
+#             info[0][2],
+#         ]
+#         i = i + 1
 
-xlxs.to_excel(TPB_CT + ".xlsx", "Sheet1", index=False)
+# xlxs.to_excel(TPB_CT + ".xlsx", "Sheet1", index=False)
+
+
+"""获取骨三相数据中的姓名性别影像学ID"""
+# folder = r"C:\Users\admin\Desktop\Data\ThreePhaseBone-CT\NormalData"
+# dirs = os.listdir(folder)
+# excel_file = r"C:\Users\admin\Desktop\Data\ThreePhaseBone\ThreePhaseBone.xlsx"
+# tags = {
+#     0x00100010: "Patient Name",
+#     0x00100020: "Patient ID",
+#     0x00100040: "Patient Sex",
+#     0x00080014: "Instance Creator UID",
+#     0x00080016: "SOP Class UID",
+#     0x00080018: "SOP Instance UID",
+#     0x0020000D: "Study Instance UID",
+#     0x0020000E: "Series Instance UID",
+#     0x00200052: "Frame of Reference UID",
+# }
+# tpb = pd.read_excel(excel_file)
+
+# new_excel = pd.DataFrame(columns=["姓名", "性别", *list(tags.values())])
+# for dir in dirs:
+#     no = int(dir)
+#     name_sex = tpb.query(f"编号 == {no}")[["姓名", "性别"]].values
+#     file = os.path.join(folder, dir, "ImageFileName.dcm")
+#     infomation = get_patient_info(file, tags)
+#     infomation["姓名"] = name_sex[0, 0].strip()
+#     infomation["性别"] = name_sex[0, 1].strip()
+#     new_excel.loc[len(new_excel)] = infomation
+# new_excel.to_excel("TPB_ID.xlsx")
+
+"""将PET图像中的矩阵值转换为SUV值"""
+# path = "C:\\Users\\admin\\Desktop\\Data\\PET-FRI\\NormalData"
+
+# 移动文件
+# result_path1 = "C:\\Users\\admin\\Desktop\\one"
+# result_path2 = "C:\\Users\\admin\\Desktop\\two"
+# mkdir(result_path1)
+# mkdir(result_path2)
+
+
+# c = os.listdir(path)[-50:]
+# for _ in c:
+#     _path = os.path.join(path, _)
+#     _result = os.path.join(result_path2, _)
+#     mkdir(_result)
+#     for _p in os.listdir(_path):
+#         __path = os.path.join(_path, _p)
+#         if not os.path.isdir(__path):
+#             shutil.copy(__path, _result)
+# print(0)
+# for _ in a + b:
+#     folder = os.path.dirname(os.path.dirname(_))
+#     shutil.move(_, folder)
+# PET_dirs = os.listdir(path)
+# for dir in PET_dirs:
+#     files = glob(os.path.join(path, dir, "PET", "*.dcm"))
+#     pet = read_serises_image(files)
+#     pixel_array = sitk.GetArrayFromImage(pet)
+#     flag = pixel_array.dtype == np.int16
+#     if flag:
+#         print("---skip---", dir)
+#         continue
+#     suvbw = np.zeros_like(pixel_array, dtype=np.float64)
+#     for i in range(pixel_array.shape[0]):
+#         suvbw[i] = get_SUVbw_in_GE(pixel_array[i], files[i])
+#         for j in range(128):
+#             for k in range(128):
+#                 pet[k, j, i] = suvbw[i, j, k]
+#     print("done---", dir)
+#     sitk.WriteImage(pet, os.path.join(path, dir, "PET", "suvbw.nii.gz"))
+
+# left_dirs = [
+#     "120",
+#     "270",
+#     "327",
+#     "370",
+#     "393",
+#     "453",
+#     "456",
+#     "457",
+#     "489",
+#     "592",
+#     "600",
+#     "634",
+#     "725",
+# ]
+# for dir in left_dirs:
+#     files = glob(os.path.join(path, dir, "PET", "*.dcm"))
+#     pet = read_serises_image(files)
+#     pixel_array = sitk.GetArrayFromImage(pet)
+#     suvbw = np.zeros_like(pixel_array, dtype=np.float64)
+#     for i in range(pixel_array.shape[0]):
+#         suvbw[i] = get_SUVbw_in_GE(pixel_array[i], files[i])
+#     suvbw_image = sitk.GetImageFromArray(suvbw)
+#     suvbw_image.SetDirection(pet.GetDirection())
+#     suvbw_image.SetOrigin(pet.GetOrigin())
+#     suvbw_image.SetSpacing(pet.GetSpacing())
+#     # suvbw_image.SetPixelAsComplexFloat64(())
+#     sitk.WriteImage(suvbw_image, os.path.join(path, dir, "PET", "suvbw.nii.gz"))
+#     print(f"{dir} done.")
+
+
+# path = "D:\\Desktop\\Data\\PET-CT"
+# files = glob(os.path.join(path, "*", "*.nii.gz"))
+# res = {}
+# for file in files:
+#     folder = os.path.dirname(file)
+#     cts = glob(os.path.join(folder, "CT*"))
+#     image = read_serises_image(cts)
+#     print("{} SPACING: {}".format(os.path.basename(folder), image.GetSpacing()))
+#     res[os.path.basename(folder)] = {"Spacing": list(image.GetSpacing())}
+# save_json("pulmonary_nodules.json", res)
+
+# file = np.load("Files/PETCT_20221001/076_CT335_00.npz")["mask"]
+# cv2.imwrite(
+#     "t1.jpg",
+#     file * 255,
+#     [int(cv2.IMWRITE_JPEG_QUALITY), 100],
+# )
