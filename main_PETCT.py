@@ -1,4 +1,5 @@
 import copy
+from math import sqrt
 import os
 from glob import glob
 from typing import List, Tuple
@@ -8,8 +9,8 @@ import numpy as np
 import pandas as pd
 import SimpleITK as sitk
 
-from utils.dicom import get_SUVbw_in_GE, ct2image
-from utils.utils import OUTPUT_FOLDER, mkdirs
+from utils.dicom import get_SUVbw_in_GE, ct2image, read_serises_image
+from utils.utils import OUTPUT_FOLDER, load_json, mkdirs, save_json
 
 
 def crop_based_lesions(
@@ -128,14 +129,14 @@ def get_resampled_SUVbw_from_PETCT(
 """ series images的顺序是从肺部上面到下面, .nii.gz的顺序恰好相反, 从下面到上面."""
 
 # 常量
-SEGMENTATION_FILES = glob("Data/PET-CT/*/*.nii.gz")
-LUNG_SLICE = pd.read_excel("Data/PET-CT/PET-CT.xlsx", "Sheet1")[
+SEGMENTATION_FILES = glob("D:/Desktop/Data/PET-CT/*/*.nii.gz")
+LUNG_SLICE = pd.read_excel("D:/Desktop/Data/PET-CT/PET-CT.xlsx", "Sheet1")[
     ["肺部切片第一张", "肺部切片最后一张"]
 ].values
 
 # 输出文件路径
-data_folder = os.path.join(OUTPUT_FOLDER, "PETCT_")
-image_folder = os.path.join(OUTPUT_FOLDER, "PETCT_", "images")
+data_folder = os.path.join(OUTPUT_FOLDER, "PETCT_20221001")
+image_folder = os.path.join(OUTPUT_FOLDER, "PETCT_20221001", "images")
 mkdirs([OUTPUT_FOLDER, data_folder, image_folder])
 # reg 数据处理
 for segmentation_file in SEGMENTATION_FILES:
@@ -198,10 +199,7 @@ for segmentation_file in SEGMENTATION_FILES:
 
             # 获取当前的HU和SUVbw
             current_HU = lung_HU[i]
-            current_HU_img = copy.deepcopy(current_HU)
-            current_HU_img = ct2image(current_HU_img, 0, 2000, True)
-            # current_HU_img = current_HU_img[:, :, np.newaxis]
-            # current_HU_img = np.repeat(current_HU_img, repeats=3, axis=2)
+            current_HU_img = ct2image(copy.deepcopy(current_HU), 0, 2000, True)
             current_SUVbw = lung_SUVbw[i]
 
             # 由于每张图片可能存在多个病灶，所以需要定位出每个病灶并计算出每个病灶的suv max，min，mean
@@ -218,28 +216,35 @@ for segmentation_file in SEGMENTATION_FILES:
                 current_HU_img,
                 [int(cv2.IMWRITE_JPEG_QUALITY), 100],
             )
-
-            masked_SUVbw = np.ma.masked_where(
-                current_segmaentation_array == 0, current_SUVbw
-            )
-            SUVbw_max = np.max(masked_SUVbw)
-            SUVbw_min = np.min(masked_SUVbw)
-            SUVbw_mean = np.mean(masked_SUVbw)
-
-            # 每张CT及其标注图以及CT图中存在的病灶中所有的SUVmax, SUVmin, SUVmean
-            np.savez(
+            cv2.imwrite(
                 os.path.join(
-                    data_folder,
-                    f"{dir_name}_{current_CT_filename}",
+                    image_folder, f"{dir_name}_{current_CT_filename}_mask.jpg"
                 ),
-                hounsfield_unit=current_HU,
-                mask=current_segmaentation_array,
-                SUVmax=SUVbw_max,
-                SUVmean=SUVbw_mean,
-                SUVmin=SUVbw_min,
+                current_segmaentation_array * 255,
+                [int(cv2.IMWRITE_JPEG_QUALITY), 100],
             )
-            if True:
-                continue
+
+            # masked_SUVbw = np.ma.masked_where(
+            #     current_segmaentation_array == 0, current_SUVbw
+            # )
+            # SUVbw_max = np.max(masked_SUVbw)
+            # SUVbw_min = np.min(masked_SUVbw)
+            # SUVbw_mean = np.mean(masked_SUVbw)
+
+            # # 每张CT及其标注图以及CT图中存在的病灶中所有的SUVmax, SUVmin, SUVmean
+            # np.savez(
+            #     os.path.join(
+            #         data_folder,
+            #         f"{dir_name}_{current_CT_filename}",
+            #     ),
+            #     hounsfield_unit=current_HU,
+            #     mask=current_segmaentation_array,
+            #     SUVmax=SUVbw_max,
+            #     SUVmean=SUVbw_mean,
+            #     SUVmin=SUVbw_min,
+            # )
+            # if True:
+            #     continue
 
             # 处理每个病灶
             for idx, contour in enumerate(contours):
@@ -248,28 +253,79 @@ for segmentation_file in SEGMENTATION_FILES:
                 if len(contour.shape) == 1:
                     break
 
-                # 将每个轮廓绘制在 CT_img 上
-                cv2.polylines(
-                    current_HU_img,
-                    [contour],
-                    isClosed=True,
-                    color=(0, 0, 255),
-                    thickness=1,
-                )
-
                 # 获得每个病灶的大致位置
                 contour_right, contour_lower = np.max(contour, axis=0)
                 contour_left, contour_upper = np.min(contour, axis=0)
-                # 计算每个病灶区域的 suv max, suv mean, suv min
-                masked_SUVbw = np.ma.masked_where(
-                    current_segmaentation_array == 0, current_SUVbw
+
+                # 在mask上仅保留一个轮廓
+                only_one_segmentation = only_center_contour(
+                    current_segmaentation_array,
+                    [
+                        (contour_left + contour_right) * 0.5,
+                        (contour_upper + contour_lower) * 0.5,
+                    ],
                 )
-                cropped_masked_SUVbw = masked_SUVbw[
-                    contour_upper : contour_lower + 1, contour_left : contour_right + 1
-                ]
-                SUVbw_max = np.max(cropped_masked_SUVbw)
-                SUVbw_min = np.min(cropped_masked_SUVbw)
-                SUVbw_mean = np.mean(cropped_masked_SUVbw)
+
+                # 根据mask计算最大直径
+                pulmonary_nodules = load_json("pulmonary_nodules.json")
+                spacing = pulmonary_nodules[dir_name]["Spacing"]
+                max_distance = 0
+                points = []
+                for i in range(len(contour)):
+                    for j in range(i + 1, len(contour)):
+                        d = np.abs(contour[i] - contour[j]) * spacing[:2]
+                        md = sqrt(d[0] ** 2 + d[1] ** 2)
+                        if md > max_distance:
+                            max_distance = md
+                            points = [contour[i].tolist(), contour[j].tolist()]
+
+                # 保存仅一个轮廓的 mask 图像文件
+                only_one_segmentation_image = only_one_segmentation * 255
+                cv2.imwrite(
+                    os.path.join(
+                        image_folder,
+                        f"{dir_name}_{current_CT_filename}_{str(idx).zfill(2)}_mask.jpg",
+                    ),
+                    only_one_segmentation_image,
+                    [int(cv2.IMWRITE_JPEG_QUALITY), 100],
+                )
+                cv2.line(
+                    only_one_segmentation_image,
+                    points[0],
+                    points[1],
+                    color=(127, 127, 127),
+                    thickness=1,
+                )
+                cv2.imwrite(
+                    os.path.join(
+                        image_folder,
+                        f"{dir_name}_{current_CT_filename}_{str(idx).zfill(2)}_mask_.jpg",
+                    ),
+                    only_one_segmentation_image,
+                    [int(cv2.IMWRITE_JPEG_QUALITY), 100],
+                )
+
+                # 根据仅有一个轮廓的mask, 计算每个病灶区域的 suv max, suv mean, suv min
+                masked_SUVbw = np.ma.masked_where(
+                    only_one_segmentation == 0, current_SUVbw
+                )
+                SUVbw_max = np.max(masked_SUVbw)
+                SUVbw_min = np.min(masked_SUVbw)
+                SUVbw_mean = np.mean(masked_SUVbw)
+
+                pulmonary_nodules[dir_name][
+                    current_CT_filename + "_" + str(idx).zfill(2)
+                ] = {
+                    "distance": max_distance,
+                    "points": points,
+                    "suv": [
+                        SUVbw_max.tolist(),
+                        SUVbw_mean.tolist(),
+                        SUVbw_min.tolist(),
+                    ],
+                }
+
+                save_json("pulmonary_nodules.json", pulmonary_nodules)
 
                 # 在CT和切割标签图中切出每个病灶
                 left, upper, right, lower, apply_resize = crop_based_lesions(
@@ -277,19 +333,12 @@ for segmentation_file in SEGMENTATION_FILES:
                     cliped_size=(32, 32),
                 )
                 cropped_HU = current_HU[upper:lower, left:right]
-                print(cropped_HU.shape)
-                cropped_segmentation = current_segmaentation_array[
-                    upper:lower, left:right
-                ]
+                cropped_segmentation = only_one_segmentation[upper:lower, left:right]
                 if apply_resize:
                     cropped_HU = cv2.resize(cropped_HU, (32, 32))
                     cropped_segmentation = cv2.resize(cropped_segmentation, (32, 32))
                     print("there is one need to resize to 32x32!!")
 
-                # seg 仅保留一个中心的病灶
-                cropped_segmentation_only_one = only_center_contour(
-                    cropped_segmentation, (15.5, 15.5)
-                )
                 # 保存npz文件: cropped HU(32x32), cropped segmentation(32x32), SUVbw max, SUVbw mean, SUVbw min
                 np.savez(
                     os.path.join(
@@ -298,7 +347,6 @@ for segmentation_file in SEGMENTATION_FILES:
                     ),
                     hounsfield_unit=cropped_HU,
                     mask=cropped_segmentation,
-                    mask_=cropped_segmentation_only_one,
                     SUVmax=SUVbw_max,
                     SUVmean=SUVbw_mean,
                     SUVmin=SUVbw_min,
@@ -308,7 +356,7 @@ for segmentation_file in SEGMENTATION_FILES:
                 cv2.imwrite(
                     os.path.join(
                         image_folder,
-                        f"{dir_name}_{current_CT_filename}_{str(idx).zfill(2)}_img.jpg",
+                        f"{dir_name}_{current_CT_filename}_{str(idx).zfill(2)}_croped.jpg",
                     ),
                     ct2image(copy.deepcopy(cropped_HU), 0, 2000, True),
                     [int(cv2.IMWRITE_JPEG_QUALITY), 100],
@@ -316,16 +364,8 @@ for segmentation_file in SEGMENTATION_FILES:
                 cv2.imwrite(
                     os.path.join(
                         image_folder,
-                        f"{dir_name}_{current_CT_filename}_{str(idx).zfill(2)}_seg.jpg",
+                        f"{dir_name}_{current_CT_filename}_{str(idx).zfill(2)}_croped_mask.jpg",
                     ),
                     cropped_segmentation * 255,
-                    [int(cv2.IMWRITE_JPEG_QUALITY), 100],
-                )
-                cv2.imwrite(
-                    os.path.join(
-                        image_folder,
-                        f"{dir_name}_{current_CT_filename}_{str(idx).zfill(2)}_seg_one.jpg",
-                    ),
-                    cropped_segmentation_only_one * 255,
                     [int(cv2.IMWRITE_JPEG_QUALITY), 100],
                 )
