@@ -186,10 +186,10 @@ def read_serises_image(files: List[str]) -> sitk.Image:
     return images
 
 
-def get_patient_info(filename: str):
+def get_patient_info(filename: str, dicom_tag: dict = DICOM_TAG):
     file = pydicom.dcmread(filename)
     information = {}
-    for key, value in DICOM_TAG.items():
+    for key, value in dicom_tag.items():
         try:
             information[value] = file[key].value
         except:
