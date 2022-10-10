@@ -245,57 +245,84 @@ from utils.utils import load_json, to_pinyin
 # patient_info = pd.read_excel("Data/PET-FRI/PET-FRI.xlsx", "FRI")
 
 
-TPB_CT = "Data/ThreePhaseBone-CT/问题数据"
-patient_info = pd.read_excel("Data/ThreePhaseBone/ThreePhaseBone.xlsx")
+# TPB_CT = "Data/ThreePhaseBone-CT/问题数据"
+# patient_info = pd.read_excel("Data/ThreePhaseBone/ThreePhaseBone.xlsx")
 
-dirs = os.listdir(TPB_CT)
-xlxs = pd.DataFrame(
-    columns=[
-        "No",
-        "Folder",
-        "Datetime",
-        "Name",
-        "Sex",
-        "NameFromExcel",
-        "SexFromExcel",
-        "NameToPinyin",
-        "TimeFromExcel",
-    ]
-)
-i = 1
-for dir in dirs:
-    # 每个病人的数据, 子文件夹 CT、PET 中读取一个文件，主文件下读取所有文件
-    print(f"编号: {dir:>3}")
-    patient_dir = os.path.join(TPB_CT, dir)
-    sub_dirs = os.listdir(patient_dir)
-    for sub_dir in sub_dirs:
-        patient_sub_dir = os.path.join(patient_dir, sub_dir)
-        if os.path.isdir(patient_sub_dir):
-            filenames = os.listdir(patient_sub_dir)
-            if len(filenames) == 0:
-                continue
-            dicom_filename = os.path.join(patient_sub_dir, filenames[0])
-            information = get_patient_info(dicom_filename)
-        else:
-            # 仅查看PET或者CT的文件中的信息
+# dirs = os.listdir(TPB_CT)
+# xlxs = pd.DataFrame(
+#     columns=[
+#         "No",
+#         "Folder",
+#         "Datetime",
+#         "Name",
+#         "Sex",
+#         "NameFromExcel",
+#         "SexFromExcel",
+#         "NameToPinyin",
+#         "TimeFromExcel",
+#     ]
+# )
+# i = 1
+# for dir in dirs:
+#     # 每个病人的数据, 子文件夹 CT、PET 中读取一个文件，主文件下读取所有文件
+#     print(f"编号: {dir:>3}")
+#     patient_dir = os.path.join(TPB_CT, dir)
+#     sub_dirs = os.listdir(patient_dir)
+#     for sub_dir in sub_dirs:
+#         patient_sub_dir = os.path.join(patient_dir, sub_dir)
+#         if os.path.isdir(patient_sub_dir):
+#             filenames = os.listdir(patient_sub_dir)
+#             if len(filenames) == 0:
+#                 continue
+#             dicom_filename = os.path.join(patient_sub_dir, filenames[0])
+#             information = get_patient_info(dicom_filename)
+#         else:
+#             # 仅查看PET或者CT的文件中的信息
+#             continue
+
+#         # query_info = patient_info.query(f"No=={int(dir[:3])}")
+#         # info = query_info[["Name", "Gender"]].values
+#         query_info = patient_info.query(f"编号=={int(dir[:3])}")
+#         info = query_info[["姓名", "性别", "检查日期"]].values
+#         pinyin = to_pinyin(info[0][0])
+#         xlxs.loc[i] = [
+#             dir,
+#             sub_dir,
+#             information["Acquisition Date"],
+#             information["Patient Name"],
+#             information["Patient Sex"],
+#             info[0][0],
+#             info[0][1],
+#             pinyin,
+#             info[0][2],
+#         ]
+#         i = i + 1
+
+# xlxs.to_excel(TPB_CT + ".xlsx", "Sheet1", index=False)
+
+
+""" 绘制肺结节最大直方图 """
+pulmonary_nodules = load_json("pulmonary_nodules.json")
+distance = []
+for CT_no, value in pulmonary_nodules.items():
+
+    for slice_no, v in value.items():
+        if slice_no == "Spacing":
             continue
+        else:
+            distance.append(v["distance"])
+height, bins = np.histogram(distance, bins=np.arange(np.max(distance) + 1))
 
-        # query_info = patient_info.query(f"No=={int(dir[:3])}")
-        # info = query_info[["Name", "Gender"]].values
-        query_info = patient_info.query(f"编号=={int(dir[:3])}")
-        info = query_info[["姓名", "性别", "检查日期"]].values
-        pinyin = to_pinyin(info[0][0])
-        xlxs.loc[i] = [
-            dir,
-            sub_dir,
-            information["Acquisition Date"],
-            information["Patient Name"],
-            information["Patient Sex"],
-            info[0][0],
-            info[0][1],
-            pinyin,
-            info[0][2],
-        ]
-        i = i + 1
+plt.figure(figsize=(19.2, 10.8), dpi=100)
+ax = plt.subplot(1, 1, 1)
+left = np.arange(len(bins) - 1)
 
-xlxs.to_excel(TPB_CT + ".xlsx", "Sheet1", index=False)
+b = ax.bar(left + 0.5, height, 0.8)
+ax.bar_label(b)
+ax.set_xticks(np.arange(0, len(bins)))
+ax.set_xticklabels(map(str, bins.astype(np.uint16)))
+ax.tick_params(labelsize=8)
+ax.set_ylabel("Number")
+ax.set_xlabel("Maximum Diameter")
+
+plt.show()
