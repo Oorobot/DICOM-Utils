@@ -224,28 +224,6 @@ for segmentation_file in SEGMENTATION_FILES:
                 [int(cv2.IMWRITE_JPEG_QUALITY), 100],
             )
 
-            # masked_SUVbw = np.ma.masked_where(
-            #     current_segmaentation_array == 0, current_SUVbw
-            # )
-            # SUVbw_max = np.max(masked_SUVbw)
-            # SUVbw_min = np.min(masked_SUVbw)
-            # SUVbw_mean = np.mean(masked_SUVbw)
-
-            # # 每张CT及其标注图以及CT图中存在的病灶中所有的SUVmax, SUVmin, SUVmean
-            # np.savez(
-            #     os.path.join(
-            #         data_folder,
-            #         f"{dir_name}_{current_CT_filename}",
-            #     ),
-            #     hounsfield_unit=current_HU,
-            #     mask=current_segmaentation_array,
-            #     SUVmax=SUVbw_max,
-            #     SUVmean=SUVbw_mean,
-            #     SUVmin=SUVbw_min,
-            # )
-            # if True:
-            #     continue
-
             # 处理每个病灶
             for idx, contour in enumerate(contours):
 

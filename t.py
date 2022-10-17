@@ -1,9 +1,11 @@
+import shutil
 from tkinter import font
 from utils.utils import load_json, save_json
 import os
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
+import zipfile
 
 # data_files = load_json("2022-10-01.json")
 # five_fold = load_json("five_fold.json")
@@ -105,92 +107,91 @@ import pandas as pd
 #     plt.xlim(0, 60)
 #     plt.savefig(f"Figure {2*j+2}.svg")
 
-data_file = load_json("Files/2022-10-01.json")
-diff = np.setdiff1d(data_file["fold_1"]["validate"], data_file["fold_2"]["validate"])
-same_files = np.setdiff1d(data_file["fold_1"]["validate"], diff).tolist()
-summary = load_json("Files/res.json")
-five_fold = summary["test"]
-independent = summary["validate"]
-col_names = [
-    "Maximum Diameter",
-    "SUVmax",
-    "SUVmean",
-    "SUVmin",
-    "predicted SUVmax",
-    "predicted SUVmean",
-    "predicted SUVmin",
-    "绝对误差 SUVmax",
-    "绝对误差 SUVmean",
-    "绝对误差 SUVmin",
-    "平均绝对误差",
-    "相对误差 SUVmax",
-    "相对误差 SUVmean",
-    "相对误差 SUVmin",
-    "平均相对误差",
-    "平方差 SUVmax",
-    "平方差 SUVmean",
-    "平方差 SUVmin",
-    "平均平方差",
-]
+# data_file = load_json("Files/2022-10-01.json")
+# diff = np.setdiff1d(data_file["fold_1"]["validate"], data_file["fold_2"]["validate"])
+# same_files = np.setdiff1d(data_file["fold_1"]["validate"], diff).tolist()
+# summary = load_json("Files/res.json")
+# five_fold = summary["test"]
+# independent = summary["validate"]
+# col_names = [
+#     "Maximum Diameter",
+#     "SUVmax",
+#     "SUVmean",
+#     "SUVmin",
+#     "predicted SUVmax",
+#     "predicted SUVmean",
+#     "predicted SUVmin",
+#     "绝对误差 SUVmax",
+#     "绝对误差 SUVmean",
+#     "绝对误差 SUVmin",
+#     "平均绝对误差",
+#     "相对误差 SUVmax",
+#     "相对误差 SUVmean",
+#     "相对误差 SUVmin",
+#     "平均相对误差",
+#     "平方差 SUVmax",
+#     "平方差 SUVmean",
+#     "平方差 SUVmin",
+#     "平均平方差",
+# ]
 
-# excel_writer = pd.ExcelWriter("five_fold.xlsx")
-with pd.ExcelWriter("independent.xlsx") as writer:
-    r = pd.DataFrame(columns=col_names)
-    index_name = []
-    for file in same_files:
-        key = os.path.basename(file)[:-4]
-        index_name.append(key)
-        diameter = []
-        s_g = []
-        s_p = []
-        info = []
-        for fold_name, value in independent.items():
-            diameter.append(value[key]["distance"])
-            s_g.append(value[key]["ground_truth"])
-            s_p.append(value[key]["prediction"])
-        diameter = np.mean(diameter)
-        s_g = np.mean(s_g, axis=0)
-        s_p = np.mean(s_p, axis=0)
-        info = info + [diameter] + s_g.tolist() + s_p.tolist()
-        ae = np.abs(s_g - s_p)
-        re = ae / s_g
-        se = ae ** 2
+# # excel_writer = pd.ExcelWriter("five_fold.xlsx")
+# with pd.ExcelWriter("independent.xlsx") as writer:
+#     r = pd.DataFrame(columns=col_names)
+#     index_name = []
+#     for file in same_files:
+#         key = os.path.basename(file)[:-4]
+#         index_name.append(key)
+#         diameter = []
+#         s_g = []
+#         s_p = []
+#         info = []
+#         for fold_name, value in independent.items():
+#             diameter.append(value[key]["distance"])
+#             s_g.append(value[key]["ground_truth"])
+#             s_p.append(value[key]["prediction"])
+#         diameter = np.mean(diameter)
+#         s_g = np.mean(s_g, axis=0)
+#         s_p = np.mean(s_p, axis=0)
+#         info = info + [diameter] + s_g.tolist() + s_p.tolist()
+#         ae = np.abs(s_g - s_p)
+#         re = ae / s_g
+#         se = ae ** 2
 
-        def add(i, e):
-            return i + e.tolist() + [np.mean(e)]
+#         def add(i, e):
+#             return i + e.tolist() + [np.mean(e)]
 
-        info = add(info, ae)
-        info = add(info, re)
-        info = add(info, se)
-        r.loc[len(r)] = info
+#         info = add(info, ae)
+#         info = add(info, re)
+#         info = add(info, se)
+#         r.loc[len(r)] = info
 
-    r.index = index_name
-    r.to_excel(writer, sheet_name="average")
+#     r.index = index_name
+#     r.to_excel(writer, sheet_name="average")
 
-    for fold_name, value in independent.items():
-        r = pd.DataFrame(columns=col_names)
-        index_name = []
+#     for fold_name, value in independent.items():
+#         r = pd.DataFrame(columns=col_names)
+#         index_name = []
 
-        for k, v in value.items():
-            index_name.append(k)
-            info = []
-            d = v["distance"]
-            suv = v["ground_truth"]
-            pred_suv = v["prediction"]
-            info = info + [d] + suv + pred_suv
-            suv, pred_suv = np.array(suv), np.array(pred_suv)
-            ae = np.abs(suv - pred_suv)
-            re = ae / suv
-            se = ae ** 2
+#         for k, v in value.items():
+#             index_name.append(k)
+#             info = []
+#             d = v["distance"]
+#             suv = v["ground_truth"]
+#             pred_suv = v["prediction"]
+#             info = info + [d] + suv + pred_suv
+#             suv, pred_suv = np.array(suv), np.array(pred_suv)
+#             ae = np.abs(suv - pred_suv)
+#             re = ae / suv
+#             se = ae ** 2
 
-            def add(i, e):
-                return i + e.tolist() + [np.mean(e)]
+#             def add(i, e):
+#                 return i + e.tolist() + [np.mean(e)]
 
-            info = add(info, ae)
-            info = add(info, re)
-            info = add(info, se)
-            r.loc[len(r)] = info
+#             info = add(info, ae)
+#             info = add(info, re)
+#             info = add(info, se)
+#             r.loc[len(r)] = info
 
-        r.index = index_name
-        r.to_excel(writer, sheet_name=fold_name)
-
+#         r.index = index_name
+#         r.to_excel(writer, sheet_name=fold_name)

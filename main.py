@@ -72,30 +72,6 @@ from utils.utils import load_json, mkdir, save_json, to_pinyin
 #     )
 
 
-""" 使用镜像的方式将 SUVmax > 2.5 的数据扩展至原来的四倍"""
-# z = np.load("Files/PETCT/001_CT131_00.npz")
-
-
-# def normalize(hu: np.ndarray):
-#     hu = np.clip(hu, -1000, 1000)
-#     hu = hu / 2000 + 0.5
-#     return hu
-
-
-# image1 = normalize(z["HU"])
-# image2 = np.flip(image1, 0)
-# image3 = np.flip(image1, 1)
-# image4 = np.flip(image2, 1)
-# cv2.imshow("img", image1)
-# cv2.waitKey()
-# cv2.imshow("img", image2)
-# cv2.waitKey()
-# cv2.imshow("img", image3)
-# cv2.waitKey()
-# cv2.imshow("img", image4)
-# cv2.waitKey()
-
-
 """统计已有的PET-FRI的病人信息"""
 # base_path = "Data/PET-FRI&TPB-CT/PET-FRI/NormalData"
 # PET_FRI_dirs = os.listdir(base_path)
@@ -183,8 +159,6 @@ from utils.utils import load_json, mkdir, save_json, to_pinyin
 #         left + (j + 0.5) * 1.0 / n, h, width=1.0 / n, color=colors[j], label=labels[j]
 #     )
 #     ax.bar_label(b)
-#     # for a, b in zip(left + (j + 0.5) * 1.0 / n, h):
-#     #     ax.text(a, b + 1, b, ha="center", va="bottom")
 # ax.legend()
 # ax.set_xticks(np.arange(0, len(bins)))
 # ax.set_xticklabels(map(str, bins))
@@ -333,28 +307,25 @@ from utils.utils import load_json, mkdir, save_json, to_pinyin
 # new_excel.to_excel("TPB_ID.xlsx")
 
 """将PET图像中的矩阵值转换为SUV值"""
-# path = "C:\\Users\\admin\\Desktop\\Data\\PET-FRI\\NormalData"
+path = "D:\\Desktop\\Data\\PET-FRI\\NormalData"
 
 # 移动文件
-# result_path1 = "C:\\Users\\admin\\Desktop\\one"
-# result_path2 = "C:\\Users\\admin\\Desktop\\two"
-# mkdir(result_path1)
-# mkdir(result_path2)
+
+result_path = "D:\\Desktop\\result"
+mkdir(result_path)
 
 
-# c = os.listdir(path)[-50:]
-# for _ in c:
-#     _path = os.path.join(path, _)
-#     _result = os.path.join(result_path2, _)
-#     mkdir(_result)
-#     for _p in os.listdir(_path):
-#         __path = os.path.join(_path, _p)
-#         if not os.path.isdir(__path):
-#             shutil.copy(__path, _result)
-# print(0)
-# for _ in a + b:
-#     folder = os.path.dirname(os.path.dirname(_))
-#     shutil.move(_, folder)
+c = os.listdir(path)[-210:-100] + os.listdir(path)[-50:]
+choosed = os.listdir(path)[-100:-50]
+for _ in c:
+    _path = os.path.join(path, _)
+    _result = os.path.join(result_path, _)
+    mkdir(_result)
+    for _p in os.listdir(_path):
+        __path = os.path.join(_path, _p)
+        if not os.path.isdir(__path):
+            shutil.copy(__path, _result)
+print(0)
 # PET_dirs = os.listdir(path)
 # for dir in PET_dirs:
 #     files = glob(os.path.join(path, dir, "PET", "*.dcm"))
@@ -457,28 +428,28 @@ from utils.utils import load_json, mkdir, save_json, to_pinyin
 
 
 """ 绘制肺结节最大直方图 """
-pulmonary_nodules = load_json("pulmonary_nodules.json")
-distance = []
-for CT_no, value in pulmonary_nodules.items():
+# pulmonary_nodules = load_json("pulmonary_nodules.json")
+# distance = []
+# for CT_no, value in pulmonary_nodules.items():
 
-    for slice_no, v in value.items():
-        if slice_no == "Spacing":
-            continue
-        else:
-            distance.append(v["distance"])
-height, bins = np.histogram(distance, bins=np.arange(np.max(distance) + 1))
+#     for slice_no, v in value.items():
+#         if slice_no == "Spacing":
+#             continue
+#         else:
+#             distance.append(v["distance"])
+# height, bins = np.histogram(distance, bins=np.arange(np.max(distance) + 1))
 
-plt.figure(figsize=(19.2, 10.8), dpi=100)
-ax = plt.subplot(1, 1, 1)
-left = np.arange(len(bins) - 1)
+# plt.figure(figsize=(19.2, 10.8), dpi=100)
+# ax = plt.subplot(1, 1, 1)
+# left = np.arange(len(bins) - 1)
 
-b = ax.bar(left + 0.5, height, 0.8)
-ax.bar_label(b)
-ax.set_xticks(np.arange(0, len(bins)))
-ax.set_xticklabels(map(str, bins.astype(np.uint16)))
-ax.tick_params(labelsize=8)
-ax.set_ylabel("Number")
-ax.set_xlabel("Maximum Diameter")
+# b = ax.bar(left + 0.5, height, 0.8)
+# ax.bar_label(b)
+# ax.set_xticks(np.arange(0, len(bins)))
+# ax.set_xticklabels(map(str, bins.astype(np.uint16)))
+# ax.tick_params(labelsize=8)
+# ax.set_ylabel("Number")
+# ax.set_xlabel("Maximum Diameter")
 
 # file = np.load("Files/PETCT_20221001/076_CT335_00.npz")["mask"]
 # cv2.imwrite(

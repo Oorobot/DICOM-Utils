@@ -1,7 +1,6 @@
 import os
 from copy import deepcopy
 from glob import glob
-from types import TracebackType
 from typing import List
 
 import cv2
