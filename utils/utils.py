@@ -1,17 +1,17 @@
 import json
 import os
 import stat
-from glob import glob
-from turtle import width
 from typing import List
 
 import matplotlib.pyplot as plt
 import numpy as np
 from xpinyin import Pinyin
 
+# 字符串去除前后空格 str.strip()
 # 常量
 OUTPUT_FOLDER = "./Files"
-
+P = Pinyin()
+COLORS = ["#63b2ee", "#76da91", "#f8cb7f"]
 
 # 工具
 def mkdir(dir):
@@ -61,20 +61,12 @@ def load_json(file_path: str):
     return data
 
 
-# 字符串去除前后空格 str.strip()
-
 # 汉字转拼音
-P = Pinyin()
-
-
 def to_pinyin(chinese_characters: str):
     return P.get_pinyin(chinese_characters.strip(), " ", convert="upper")
 
 
 # 画直方图
-COLORS = ["#63b2ee", "#76da91", "#f8cb7f"]
-
-
 def plot_mutilhist(
     a: List[list],
     bins: List[list],
