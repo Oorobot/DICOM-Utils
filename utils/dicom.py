@@ -211,3 +211,18 @@ def ct2image(
     if to_uint8:
         image = (image * 255).astype(np.uint8)
     return image
+
+
+def resample(
+    image: sitk.Image, target_image: sitk.Image, is_label: bool = False
+) -> sitk.Image:
+
+    resamlper = sitk.ResampleImageFilter()
+    resamlper.SetReferenceImage(target_image)
+    resamlper.SetOutputPixelType(sitk.sitkFloat32)
+    if is_label:
+        resamlper.SetInterpolator(sitk.sitkNearestNeighbor)
+    else:
+        # resamlper.SetInterpolator(sitk.sitkBSpline)
+        resamlper.SetInterpolator(sitk.sitkLinear)
+    return resamlper.Execute(image)

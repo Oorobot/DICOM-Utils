@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 import SimpleITK as sitk
 
-from utils.dicom import get_SUVbw_in_GE, ct2image, read_serises_image
+from utils.dicom import get_SUVbw_in_GE, ct2image, read_serises_image, resample
 from utils.utils import OUTPUT_FOLDER, load_json, mkdirs, save_json
 
 
@@ -78,21 +78,6 @@ def only_center_contour(mask: np.ndarray, center: Tuple[float, float]):
         for d in draw_list:
             cv2.drawContours(mask, contours, d, (0, 0, 0), cv2.FILLED)
     return mask
-
-
-def resample(
-    img: sitk.Image, tar_img: sitk.Image, is_label: bool = False
-) -> sitk.Image:
-
-    resamlper = sitk.ResampleImageFilter()
-    resamlper.SetReferenceImage(tar_img)
-    resamlper.SetOutputPixelType(sitk.sitkFloat32)
-    if is_label:
-        resamlper.SetInterpolator(sitk.sitkNearestNeighbor)
-    else:
-        # resamlper.SetInterpolator(sitk.sitkBSpline)
-        resamlper.SetInterpolator(sitk.sitkLinear)
-    return resamlper.Execute(img)
 
 
 def get_resampled_SUVbw_from_PETCT(
