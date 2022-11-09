@@ -1,6 +1,7 @@
 from datetime import datetime
 from typing import List, Tuple
 
+import cv2
 import numpy as np
 import pydicom
 import SimpleITK as sitk
@@ -226,3 +227,80 @@ def resample(
         # resamlper.SetInterpolator(sitk.sitkBSpline)
         resamlper.SetInterpolator(sitk.sitkLinear)
     return resamlper.Execute(image)
+
+
+def resample_spacing(image, output_spacing=(1.0, 1.0, 1.0)):
+    """
+    将体数据重采样的指定的spacing大小
+    image: sitk读取的image信息, 这里是体数据
+    outpacing: 指定的spacing, 默认: (1.0, 1.0, 1.0)
+    return: 重采样后的数据
+    """
+
+    # 读取文件的size和spacing信息
+    input_size = image.GetSize()
+    input_spacing = image.GetSpacing()
+
+    transform = sitk.Transform()
+    transform.SetIdentity()
+    # 计算改变spacing后的size，用物理尺寸/体素的大小
+    outsize = [
+        round(input_size[i] * input_spacing[i] / output_spacing[i]) for i in range(3)
+    ]
+    # 设定重采样的一些参数
+    resampler = sitk.ResampleImageFilter()
+    resampler.SetTransform(transform)
+    resampler.SetInterpolator(sitk.sitkLinear)
+    resampler.SetOutputOrigin(image.GetOrigin())
+    resampler.SetOutputDirection(image.GetDirection())
+    resampler.SetOutputSpacing(output_spacing)
+    resampler.SetSize(outsize)
+    return resampler.Execute(image)
+
+
+def get_3D_annotation(label: np.ndarray):
+    label_array = get_pixel_value(label)
+    # 获取标注数据的类数量
+    class_number = int(np.max(label_array))
+    # 寻找每个类的标注
+    classes = []
+    annotations = []
+    for class_value in range(1, class_number + 1):
+        # 选择的类为 1, 其余为 0.
+        class_label_array = np.where(label_array != class_value, 0, 1)
+        for slice in class_label_array:
+            # 切片中不存在标注
+            if 0 == np.max(slice):
+                continue
+            # 存在标注
+            xy_contours, _ = cv2.findContours(
+                slice.astype(np.uint8),
+                cv2.RETR_LIST,
+                cv2.CHAIN_APPROX_SIMPLE,
+            )
+            # 遍历 xy 平面的标注
+            for xy_contour in xy_contours:
+                xy_contour = np.squeeze(xy_contour)
+                assert len(xy_contour) == 4, "数据中存在不规整的标注"
+                x1, y1 = xy_contour[0]
+                x2, y2 = xy_contour[2]
+                # 根据 x1 找到相应 yz 平面的标注
+                yz_contours, _ = cv2.findContours(
+                    class_label_array[:, :, x1].astype(np.uint8),
+                    cv2.RETR_LIST,
+                    cv2.CHAIN_APPROX_SIMPLE,
+                )
+                # 遍历 yz 平面的标注
+                for yz_contour in yz_contours:
+                    assert len(yz_contour) == 4, "数据中存在不规整的标注"
+                    yz_contour = np.squeeze(yz_contour)
+                    y1_, z1 = yz_contour[0]
+                    y2_, z2 = yz_contour[2]
+                    if y1 == y1_ and y2 == y2_:
+                        classes.append(class_value)
+                        annotations.append(
+                            [int(x1), int(y1), int(z1), int(x2), int(y2), int(z2)]
+                        )
+                        # 清除对应的立方体标注
+                        class_label_array[z1 : z2 + 1, y1 : y2 + 1, x1 : x2 + 1] = 0
+    return classes, annotations
