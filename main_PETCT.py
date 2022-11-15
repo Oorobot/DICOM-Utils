@@ -1,7 +1,7 @@
 import copy
-from math import sqrt
 import os
 from glob import glob
+from math import sqrt
 from typing import List, Tuple
 
 import cv2
@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 import SimpleITK as sitk
 
-from utils.dicom import get_SUVbw_in_GE, ct2image, read_serises_image, resample
+from utils.dicom import ct2image, get_SUVbw_in_GE, read_serises_image, resample
 from utils.utils import OUTPUT_FOLDER, load_json, mkdirs, save_json
 
 

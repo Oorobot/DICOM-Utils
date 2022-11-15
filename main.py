@@ -9,21 +9,15 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import pydicom
-from mpl_toolkits.mplot3d.art3d import Poly3DCollection
-from mpl_toolkits.mplot3d import Axes3D
-from skimage import measure
 import SimpleITK as sitk
 from mlxtend.evaluate import mcnemar, mcnemar_table  # 用于计算显著性水平 p
+from mpl_toolkits.mplot3d import Axes3D
+from mpl_toolkits.mplot3d.art3d import Poly3DCollection
+from skimage import measure
 
-from utils.dicom import (
-    get_patient_info,
-    get_pixel_array,
-    get_pixel_value,
-    get_SUVbw_in_GE,
-    read_serises_image,
-    resample,
-    resample_spacing,
-)
+from utils.dicom import (get_3D_annotation, get_patient_info, get_pixel_array,
+                         get_pixel_value, get_SUVbw_in_GE, read_serises_image,
+                         resample, resample_spacing)
 from utils.metric import classification_metrics
 from utils.utils import delete, load_json, mkdir, rename, save_json, to_pinyin
 
@@ -289,75 +283,59 @@ src = "./Files"
 
 
 class_name = {1: "fraction", 2: "bladder", 3: "other"}
-labels = glob(os.path.join(folder_name, "*", "*Label*"))
-annotations = load_json("./Files/annotations.json")
+labels = glob(os.path.join(folder_name, "628", "*Label*"))
+annotations = load_json("./Files/resampled_FRI/annotations.json")
 output_folder = "./Files/resampled_FRI"
 mkdir(output_folder)
-annotations = {}
-for label in labels:
-    folder = os.path.dirname(label)
-    no = os.path.basename(folder)
-    ct = os.path.join(folder, f"{no}_CT.nii.gz")
-    pet = os.path.join(folder, f"{no}_SUVbw.nii.gz")
+# for label in labels:
+#     folder = os.path.dirname(label)
+#     no = os.path.basename(folder)
+#     ct = os.path.join(folder, f"{no}_CT.nii.gz")
+#     pet = os.path.join(folder, f"{no}_SUVbw.nii.gz")
 
-    # 读取CT数据
-    ct_image = sitk.ReadImage(ct)
-    # ct_array = sitk.GetArrayFromImage(ct_image)
-    suvbw_image = sitk.ReadImage(pet)
-    label_image = sitk.ReadImage(label)
-    # 进行重采样到均为 spacing  1x1x1 cm
-    resampled_ct = resample_spacing(ct_image)
-    resampled_suvbw = resample(suvbw_image, resampled_ct)
-    resampled_label = resample(label_image, resampled_ct, True)
+#     # 读取CT数据
+#     ct_image = sitk.ReadImage(ct)
+#     # ct_array = sitk.GetArrayFromImage(ct_image)
+#     suvbw_image = sitk.ReadImage(pet)
+#     label_image = sitk.ReadImage(label)
+#     # 进行重采样到均为 spacing  1x1x1 cm
+#     resampled_ct = resample_spacing(ct_image)
+#     resampled_suvbw = resample(suvbw_image, resampled_ct)
+#     resampled_label = resample(label_image, resampled_ct, True)
 
-    # 写入重采样的文件
-    sitk.WriteImage(resampled_ct, os.path.join(output_folder, f"{no}_rCT.nii.gz"))
-    sitk.WriteImage(resampled_suvbw, os.path.join(output_folder, f"{no}_rSUVbw.nii.gz"))
-    sitk.WriteImage(resampled_label, os.path.join(output_folder, f"{no}_rLabel.nii.gz"))
+#     # 写入重采样的文件
+#     sitk.WriteImage(resampled_ct, os.path.join(output_folder, f"{no}_rCT.nii.gz"))
+#     sitk.WriteImage(resampled_suvbw, os.path.join(output_folder, f"{no}_rSUVbw.nii.gz"))
+#     sitk.WriteImage(resampled_label, os.path.join(output_folder, f"{no}_rLabel.nii.gz"))
 
-    """记录标注数据"""
-    # 获取矩阵数据
-    resampled_label_array = sitk.GetArrayFromImage(resampled_label)
-    # 获取标注数据的类数量
-    classes_num = int(np.max(resampled_label_array))
-    # 寻找每个类的标注
-    annotation = []
-    for i in range(1, classes_num + 1):
-        class_label_array = np.where(resampled_label_array != i, 0, 1)
-        for slice in class_label_array:
-            if 0 != np.max(slice):
-                contours, _ = cv2.findContours(
-                    slice.astype(np.uint8),
-                    cv2.RETR_LIST,
-                    cv2.CHAIN_APPROX_SIMPLE,
-                )
-                for contour in contours:
-                    contour = np.squeeze(contour)
-                    x1, y1 = contour[0]
-                    x2, y2 = contour[2]
+#     """记录标注数据"""
+#     resample_label_array = sitk.GetArrayFromImage(resampled_label)
+#     classes, locations = get_3D_annotation(resample_label_array)
+#     for c, l in zip(classes, locations):
+#         annotations[no] = [
+#             {"class": class_name[c], "location": l} for c, l in zip(classes, locations)
+#         ]
 
-                    cs, _ = cv2.findContours(
-                        class_label_array[:, :, x1].astype(np.uint8),
-                        cv2.RETR_LIST,
-                        cv2.CHAIN_APPROX_SIMPLE,
-                    )
-                    for c in cs:
-                        c = np.squeeze(c)
-                        y1_, z1 = c[0]
-                        y2_, z2 = c[2]
-                        if y1 == y1_ and y2 == y2_:
-                            annotation.append(
-                                {
-                                    "class": class_name[i],
-                                    "location": [x1, y1, z1, x2, y2, z2],
-                                }
-                            )
-                            annotation[-1]["location"] = [
-                                int(_) for _ in annotation[-1]["location"]
-                            ]
-                            # 清除此标注区域数据
-                            class_label_array[z1 : z2 + 1, y1 : y2 + 1, x1 : x2 + 1] = 0
+# label = sitk.ReadImage(os.path.join(output_folder, "097_rLabel.nii.gz"))
+# label_array = sitk.GetArrayFromImage(label)
+# """记录标注数据"""
+# classes, locations = get_3D_annotation(label_array)
+# # annotations[no] = []
+# for c, l in zip(classes, locations):
+#     annotations["628"] = [
+#         {"class": class_name[c], "location": l} for c, l in zip(classes, locations)
+#     ]
 
-    annotations[no] = annotation
+# save_json(os.path.join(output_folder, "annotations.json"), annotations)
 
-save_json(os.path.join(output_folder, "annotations.json"), annotations)
+
+suvs = ["Files/resampled_FRI/633_rSUVbw.nii.gz"]
+
+for f in suvs:
+    no = os.path.basename(f).split("_")[0]
+    if int(no) < 633:
+        continue
+    array = sitk.GetArrayFromImage(sitk.ReadImage(f))
+    array = np.array(array, dtype=np.float32)
+    filename = os.path.basename(f).split(".")[0]
+    np.save(os.path.join("./Files", filename), array)

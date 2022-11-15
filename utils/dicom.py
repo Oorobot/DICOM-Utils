@@ -259,15 +259,14 @@ def resample_spacing(image, output_spacing=(1.0, 1.0, 1.0)):
 
 
 def get_3D_annotation(label: np.ndarray):
-    label_array = get_pixel_value(label)
     # 获取标注数据的类数量
-    class_number = int(np.max(label_array))
+    class_number = int(np.max(label))
     # 寻找每个类的标注
     classes = []
     annotations = []
     for class_value in range(1, class_number + 1):
         # 选择的类为 1, 其余为 0.
-        class_label_array = np.where(label_array != class_value, 0, 1)
+        class_label_array = np.where(label != class_value, 0, 1)
         for slice in class_label_array:
             # 切片中不存在标注
             if 0 == np.max(slice):
