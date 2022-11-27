@@ -1,4 +1,6 @@
+import copy
 import datetime
+import math
 import os
 import shutil
 import zipfile
@@ -15,52 +17,32 @@ from mpl_toolkits.mplot3d import Axes3D
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 from skimage import measure
 
-from utils.dicom import (get_3D_annotation, get_patient_info, get_pixel_array,
-                         get_pixel_value, get_SUVbw_in_GE, read_serises_image,
-                         resample, resample_spacing)
-from utils.metric import classification_metrics
+from utils.dicom import (
+    get_3D_annotation,
+    get_patient_info,
+    get_pixel_array,
+    get_pixel_value,
+    get_SUVbw_in_GE,
+    read_serises_image,
+    resample,
+    resample_spacing,
+)
 from utils.utils import delete, load_json, mkdir, rename, save_json, to_pinyin
 
-folder_name = "D:/admin/Desktop/Data/PET-FRI/NormalData"
-src = "./Files"
-
-""""""
-# dirs = []
-# with zipfile.ZipFile("D:/admin/Desktop/795-985.zip") as zip:
-#     filelist = zip.namelist()
-#     for file in filelist:
-#         if ".nii.gz" in file and "suv" not in file:
-#             dir_name = os.path.dirname(file)
-#             dirs.append(dir_name)
-#             # 提取压缩包里面的标注数据
-#             zip.extract(file, "Files")
-#             shutil.move(os.path.join(src, file), os.path.join(folder_name, file))
-#             shutil.rmtree(os.path.join(src, dir_name))
-# 删除掉未校验的标注数据
-# for d in dirs:
-#     folder = os.path.join(folder_name, d)
-#     if not os.path.exists(folder):
-#         continue
-#     files = os.listdir(folder)
-#     for file in files:
-#         if ".nii.gz" in file and "SUVbw" not in file and "CT" not in file:
-#             delete(os.path.join(folder, file))
+folder_name = "D:/admin/Desktop/Data/PETCT-FRI/NormalData"
+fri_xlsx = "D:/admin/Desktop/Data/PETCT-FRI/PET-FRI.xlsx"
 
 
-# 将标注数据resize到CT大小
-# files = glob("D:/Desktop/Data/PET-FRI/NormalData/*/U*.nii.gz")
-# for file in files:
-#     image = sitk.ReadImage(file)
-#     cts = glob(os.path.join(os.path.dirname(file), "CT") + "/*dcm")
-#     CT = read_serises_image(cts)
-#     pets = glob(os.path.join(os.path.dirname(file), "PET") + "/*dcm")
-#     PET = read_serises_image(pets)
-#     label512 = resample(image, CT, True)
-#     sitk.WriteImage(label512, os.path.join(os.path.dirname(file), "Label_512.nii.gz"))
-# print(0)
+"""将label重采样到CT大小"""
+# no = "098"
+# print("正在处理" + no)
+# ct = os.path.join(folder_name, no, f"{no}_CT.nii.gz")
+# ct_image = sitk.ReadImage(ct)
+# label = sitk.ReadImage(os.path.join(folder_name, no, "Untitled.nii.gz"))
+# resample_label = resample(label, ct_image, True)
+# sitk.WriteImage(resample_label, os.path.join(folder_name, no, f"{no}_CT_Label.nii.gz"))
 
-
-# 数据处理
+"""数据处理"""
 # for dir in os.listdir(folder_name):
 #     # 读取PET数据，进行重采样，得到SUVbw样本
 #     if not os.path.exists(os.path.join(folder_name, dir, "SUVbw.nii.gz")):
@@ -88,254 +70,294 @@ src = "./Files"
 #         ct_image = read_serises_image(ct_files)
 #         sitk.WriteImage(ct_image, os.path.join(folder_name, dir, "CT.nii.gz"))
 
+"""记录标注数据"""
+# class_name = {1: "fraction", 2: "bladder", 3: "other", 4: "4", 5: "5", 6: "6"}
+# labels = glob(os.path.join(folder_name, "*", "*Label.nii.gz"))
+# annotations = load_json("./Files/resampled_FRI/annotations.json")
+# output_folder = "./Files/resampled_FRI"
+# mkdir(output_folder)
 
-# 查重
-# list = []
-# excel_info = pd.read_excel("D:/Desktop/Data/PET-FRI/PET-FRI.xlsx", "FRI")
-# for dir in os.listdir(folder_name):
-#     cts = glob(os.path.join(folder_name, dir, "CT", "*"))
-#     pets = glob(os.path.join(folder_name, dir, "PET", "*"))
-#     ct_info = get_patient_info(cts[0])
-#     pet_info = get_patient_info(pets[0])
-#     info = excel_info.query(f"No == {int(dir[:3])}")[["Name"]].values.tolist()
-#     list.append(
-#         "-".join(["CT", str(ct_info["Patient Name"]), str(ct_info["Acquisition Date"])])
-#     )
-#     list.append(
-#         "-".join(
-#             ["PET", str(pet_info["Patient Name"]), str(pet_info["Acquisition Date"])]
-#         )
-#     )
-#     list += info[0]
-
-# a = pd.DataFrame(list).value_counts()
-# print(a[:21])
-# print(0)
-
-
-# 合并两个Excel表格
-# excel1 = pd.read_excel("D:/admin/Desktop/Data/PET-FRI/PET-FRI.xlsx", "FRI-unique")
-# excel2 = pd.read_excel("D:/admin/Desktop/Data/PET-FRI/PET-FRI.xlsx", "PET-all")
-# excel3 = pd.merge(excel1, excel2, how="left", on=["Name", "影像学表现", "影像学诊断"])
-# excel3.to_excel("D:/admin/Desktop/Data/PET-FRI/result.xlsx")
-
-
-# 查询病人数据跟DICOM的获取时间是否一致
-# list = []
-# excel_info = pd.read_excel("D:/admin/Desktop/Data/PET-FRI/result.xlsx")
-# log = open("./Files/result.txt", "a", encoding="utf-8")
-# for dir in os.listdir(folder_name):
-#     cts = glob(os.path.join(folder_name, dir, "CT", "*"))
-#     pets = glob(os.path.join(folder_name, dir, "PET", "*"))
-#     ct_info = get_patient_info(cts[0])
-#     pet_info = get_patient_info(pets[0])
-#     info = excel_info.query(f"No_FRI == {int(dir[:3])}")[
-#         ["Name", "Date"]
-#     ].values.tolist()
-#     list.append(
-#         "-".join(["CT", str(ct_info["Patient Name"]), str(ct_info["Acquisition Date"])])
-#     )
-#     list.append(
-#         "-".join(
-#             ["PET", str(pet_info["Patient Name"]), str(pet_info["Acquisition Date"])]
-#         )
-#     )
-
-#     name_pinyin = to_pinyin(info[0][0])
-#     date = (
-#         info[0][1].strftime("%Y%m%d") if not isinstance(info[0][1], str) else info[0][1]
-#     )
-#     if (
-#         # name_pinyin != str(ct_info["Patient Name"])
-#         # or name_pinyin != str(pet_info["Patient Name"])
-#         date != str(ct_info["Acquisition Date"])
-#         or date != str(pet_info["Acquisition Date"])
-#     ):
-#         log.write(
-#             "{:<5}-名字：{:<10}{:<18}{:<18}{:<18}，日期：{:<10}{:<10}{:<10}\n".format(
-#                 dir[:3],
-#                 info[0][0],
-#                 to_pinyin(info[0][0]),
-#                 str(ct_info["Patient Name"]),
-#                 str(pet_info["Patient Name"]),
-#                 info[0][1].strftime("%Y%m%d")
-#                 if not isinstance(info[0][1], str)
-#                 else info[0][1],
-#                 str(ct_info["Acquisition Date"]),
-#                 str(pet_info["Acquisition Date"]),
-#             )
-#         )
-#         log.flush()
-# log.close
-
-
-# # 移动文件
-# files = glob(os.path.join(folder_name, "*.nii.gz"))
-# for file in files:
-#     filename = os.path.basename(file)
-#     dirname = filename.split("_")[0]
-#     print(file, "->", os.path.join(folder_name, dirname, filename))
-#     rename(file, os.path.join(folder_name, dirname, filename))
-# files = glob(os.path.join(folder_name, "*", "*.nii.gz"))
-# for dirname in os.listdir(folder_name):
-#     files = glob(os.path.join(folder_name, dirname, "*.nii.gz"))
-#     if len(files) == 2:
-#         for file in files:
-#             filename = os.path.basename(file)
-#             shutil.copyfile(file, os.path.join(src, "FRI", filename))
-# temp_dir = os.path.join(src, ".temp")
-# mkdir(os.path.join(src, ".temp"))
-# with zipfile.ZipFile("D:/admin/Desktop/795-985.zip") as zip:
-#     filelist = zip.namelist()
-#     for file in filelist:
-#         if "Untitled" in file:
-#             zip.extract(file, temp_dir)
-#             filename = os.path.join(temp_dir, file)
-#             label = sitk.ReadImage(filename)
-#             dirname = os.path.dirname(file)
-#             ct_files = glob(os.path.join(folder_name, dirname, "CT", "*dcm"))
-#             CT = read_serises_image(ct_files)
-#             resampled_label = resample(label, CT, True)
-#             sitk.WriteImage(
-#                 resampled_label, os.path.join(src, "FRI", f"{dirname}_CT_Label.nii.gz")
-#             )
-
-# zips = ["D:/admin/Desktop/2.zip", "D:/admin/Desktop/3.zip"]
-# files = glob("D:/admin/Desktop/2/*")
-# for file in files:
-
-#     dirname = os.path.basename(file)[:3]
-#     if os.path.exists(os.path.join(src, "FRI", f"{dirname}_CT_Label.nii.gz")):
-#         continue
-
-#     ct_files = glob(os.path.join(folder_name, dirname, "CT", "*dcm"))
-
-#     if len(ct_files) == 0:
-#         continue
-
-#     label = sitk.ReadImage(file)
-
-#     CT = read_serises_image(ct_files)
-
-#     resampled_label = resample(label, CT, True)
-
-#     sitk.WriteImage(
-#         resampled_label,
-#         os.path.join(src, "FRI", f"{dirname}_CT_Label.nii.gz"),
-#     )
-
-
-# # 将标注数据进行转换json格式
-# labels = glob(os.path.join(folder_name, "*", "*Label*"))
-# annotations = {}
-# for label in labels:
-
-#     folder = os.path.dirname(label)
-#     No = os.path.basename(folder)
-#     ct = os.path.join(folder, "CT.nii.gz")
-#     pet = os.path.join(folder, "SUVbw.nii.gz")
-#     # 获取矩阵数据
-#     label_image = sitk.ReadImage(label)
-#     label_array = sitk.GetArrayFromImage(label_image)
-#     # 获取标注数据的类数量
-#     classes_num = int(np.max(label_array))
-#     # 寻找每个类的标注
-#     annotation = []
-#     for i in range(1, classes_num + 1):
-#         class_label_array = np.where(label_array != i, 0, 1)
-#         for slice in class_label_array:
-#             if 0 != np.max(slice):
-#                 contours, _ = cv2.findContours(
-#                     slice.astype(np.uint8),
-#                     cv2.RETR_LIST,
-#                     cv2.CHAIN_APPROX_SIMPLE,
-#                 )
-#                 for contour in contours:
-#                     contour = np.squeeze(contour)
-#                     x1, y1 = contour[0]
-#                     x2, y2 = contour[2]
-
-#                     cs, _ = cv2.findContours(
-#                         class_label_array[:, :, x1].astype(np.uint8),
-#                         cv2.RETR_LIST,
-#                         cv2.CHAIN_APPROX_SIMPLE,
-#                     )
-#                     for c in cs:
-#                         c = np.squeeze(c)
-#                         y1_, z1 = c[0]
-#                         y2_, z2 = c[2]
-#                         if y1 == y1_ and y2 == y2_:
-#                             annotation.append(
-#                                 {
-#                                     "class": class_name[i],
-#                                     "location": [x1, y1, z1, x2, y2, z2],
-#                                 }
-#                             )
-#                             annotation[-1]["location"] = [
-#                                 int(_) for _ in annotation[-1]["location"]
-#                             ]
-#                             # 清除此标注区域数据
-#                             class_label_array[z1 : z2 + 1, y1 : y2 + 1, x1 : x2 + 1] = 0
-
-#     annotations[No] = annotation
-
-#     save_json("./Files/annotations.json", annotations)
-
-
-class_name = {1: "fraction", 2: "bladder", 3: "other"}
-labels = glob(os.path.join(folder_name, "628", "*Label*"))
-annotations = load_json("./Files/resampled_FRI/annotations.json")
-output_folder = "./Files/resampled_FRI"
-mkdir(output_folder)
 # for label in labels:
 #     folder = os.path.dirname(label)
 #     no = os.path.basename(folder)
+#     if int(no) < 0:
+#         continue
 #     ct = os.path.join(folder, f"{no}_CT.nii.gz")
 #     pet = os.path.join(folder, f"{no}_SUVbw.nii.gz")
+#     resampled_label = os.path.join(output_folder, f"{no}_rLabel.nii.gz")
+#     if os.path.exists(resampled_label):
+#         resampled_label = sitk.ReadImage(resampled_label)
+#     else:
+#         # 读取CT数据
+#         ct_image = sitk.ReadImage(ct)
+#         suvbw_image = sitk.ReadImage(pet)
+#         label_image = sitk.ReadImage(label)
+#         # 进行重采样到均为 spacing  1x1x1 cm
+#         resampled_ct = resample_spacing(ct_image)
+#         resampled_suvbw = resample(suvbw_image, resampled_ct)
+#         resampled_label = resample(label_image, resampled_ct, True)
+#         # 写入重采样的文件
+#         if not os.path.exists(os.path.join(output_folder, f"{no}_rCT.nii.gz")):
+#             sitk.WriteImage(
+#                 resampled_ct, os.path.join(output_folder, f"{no}_rCT.nii.gz")
+#             )
+#         if not os.path.exists(os.path.join(output_folder, f"{no}_rSUVbw.nii.gz")):
+#             sitk.WriteImage(
+#                 resampled_suvbw, os.path.join(output_folder, f"{no}_rSUVbw.nii.gz")
+#             )
+#         sitk.WriteImage(
+#             resampled_label, os.path.join(output_folder, f"{no}_rLabel.nii.gz")
+#         )
 
-#     # 读取CT数据
-#     ct_image = sitk.ReadImage(ct)
-#     # ct_array = sitk.GetArrayFromImage(ct_image)
-#     suvbw_image = sitk.ReadImage(pet)
-#     label_image = sitk.ReadImage(label)
-#     # 进行重采样到均为 spacing  1x1x1 cm
-#     resampled_ct = resample_spacing(ct_image)
-#     resampled_suvbw = resample(suvbw_image, resampled_ct)
-#     resampled_label = resample(label_image, resampled_ct, True)
-
-#     # 写入重采样的文件
-#     sitk.WriteImage(resampled_ct, os.path.join(output_folder, f"{no}_rCT.nii.gz"))
-#     sitk.WriteImage(resampled_suvbw, os.path.join(output_folder, f"{no}_rSUVbw.nii.gz"))
-#     sitk.WriteImage(resampled_label, os.path.join(output_folder, f"{no}_rLabel.nii.gz"))
-
-#     """记录标注数据"""
+#     print(f"正在处理{no}的3D标注数据...")
 #     resample_label_array = sitk.GetArrayFromImage(resampled_label)
 #     classes, locations = get_3D_annotation(resample_label_array)
 #     for c, l in zip(classes, locations):
-#         annotations[no] = [
-#             {"class": class_name[c], "location": l} for c, l in zip(classes, locations)
-#         ]
-
-# label = sitk.ReadImage(os.path.join(output_folder, "097_rLabel.nii.gz"))
-# label_array = sitk.GetArrayFromImage(label)
-# """记录标注数据"""
-# classes, locations = get_3D_annotation(label_array)
-# # annotations[no] = []
-# for c, l in zip(classes, locations):
-#     annotations["628"] = [
-#         {"class": class_name[c], "location": l} for c, l in zip(classes, locations)
-#     ]
-
-# save_json(os.path.join(output_folder, "annotations.json"), annotations)
+#         annotations[no] = {
+#             "shape": resample_label_array.shape,
+#             "annotations": [
+#                 {"class": class_name[c], "location": l}
+#                 for c, l in zip(classes, locations)
+#             ],
+#         }
+#     save_json(os.path.join(output_folder, "annotations.json"), annotations)
 
 
-suvs = ["Files/resampled_FRI/633_rSUVbw.nii.gz"]
+"""剩余需要修订或标注的数据"""
+# collected = []
+# folders = os.listdir(folder_name)
+# for folder in folders:
+#     niigzs = glob(os.path.join(folder_name, folder, "*.nii.gz"))
+#     if len(niigzs) == 2:
+#         # print(folder)
+#         collected.append(folder)
+#     label_path = os.path.join(folder_name, folder, f"{folder}_CT_Label.nii.gz")
+#     try:
+#         label = get_pixel_value(label_path)
+#         if np.max(label) > 2:
+#             print("folder: ", folder)
+#     except:
+#         pass
+# print("num: ", len(collected))
 
-for f in suvs:
-    no = os.path.basename(f).split("_")[0]
-    if int(no) < 633:
-        continue
-    array = sitk.GetArrayFromImage(sitk.ReadImage(f))
-    array = np.array(array, dtype=np.float32)
-    filename = os.path.basename(f).split(".")[0]
-    np.save(os.path.join("./Files", filename), array)
+"""修改标签"""
+folders = os.listdir(folder_name)
+labels = glob(os.path.join(folder_name, "*", "*Label.nii.gz"))
+patient_info = pd.read_excel(fri_xlsx, sheet_name="FRI-unique")
+
+three2one = ["125"]
+three2two = ["074", "102", "194", "345", "402", "414", "447", "615"]
+three2four = ["024", "037", "045", "082", "089", "014", "108", "597"]
+four2one = ["109"]
+for label in labels:
+    print(f"处理 {label} ……")
+    no = os.path.basename(os.path.dirname(label))
+    int_no = int(no)
+    # 根据编号查询感染情况
+    is_infected = np.squeeze(
+        patient_info.query(f"No==@int_no")[["Final_diagnosis"]].values
+    )
+
+    label_image = sitk.ReadImage(label)
+    label_array = sitk.GetArrayFromImage(label_image)
+
+    # 深层复制 array, 用于修改标签, 以避免来回修改
+    copy_array = copy.deepcopy(label_array)
+    # 进行转换
+    if no in three2one:
+        label_array[copy_array == 3] = 1
+    if no in three2two:
+        label_array[copy_array == 3] = 2
+    if no in three2four:
+        label_array[copy_array == 3] = 4
+    if no in four2one:
+        label_array[copy_array == 4] = 1
+
+    # 将 bladder 转换 2 -> 3
+    label_array[copy_array == 2] = 3
+
+    # 将病灶区域转换为 感染区域 1 和 非感染区域 2
+    if is_infected == "F":
+        label_array[copy_array == 1] = 2
+
+    # array 转换回 image
+    changed_image = sitk.GetImageFromArray(label_array)
+
+    changed_image.CopyInformation(label_image)
+    # print("===> label image: \n", label_image, "===> changed image: \n", changed_image)
+    sitk.WriteImage(
+        changed_image, os.path.join(folder_name, no, f"{no}_CT_Label_new.nii.gz")
+    )
+
+
+# def intersect_box(b1: np.ndarray, b2: np.ndarray, based_b1_correct_box: bool = True):
+#     """
+#     b1: (1, 6), 一个边界框
+#     b2: (N, 7), 一堆边界框
+#     """
+#     N = b2.shape[0]
+#     b1_x1, b1_y1, b1_z1, b1_x2, b1_y2, b1_z2 = (
+#         b1[:, 0],
+#         b1[:, 1],
+#         b1[:, 2],
+#         b1[:, 3],
+#         b1[:, 4],
+#         b1[:, 5],
+#     )
+#     b2_x1, b2_y1, b2_z1, b2_x2, b2_y2, b2_z2 = (
+#         b2[:, 0],
+#         b2[:, 1],
+#         b2[:, 2],
+#         b2[:, 3],
+#         b2[:, 4],
+#         b2[:, 5],
+#     )
+#     intersect_box_x1 = np.maximum(b1_x1, b2_x1)
+#     intersect_box_y1 = np.maximum(b1_y1, b2_y1)
+#     intersect_box_z1 = np.maximum(b1_z1, b2_z1)
+#     intersect_box_x2 = np.minimum(b1_x2, b2_x2)
+#     intersect_box_y2 = np.minimum(b1_y2, b2_y2)
+#     intersect_box_z2 = np.minimum(b1_z2, b2_z2)
+
+#     intersect_boxes = []
+#     for i in range(N):
+#         if (
+#             intersect_box_x2[i] - intersect_box_x1[i] > 0
+#             and intersect_box_y2[i] - intersect_box_y1[i] > 0
+#             and intersect_box_z2[i] - intersect_box_z1[i] > 0
+#         ):
+#             if based_b1_correct_box:
+#                 intersect_boxes.append(
+#                     [
+#                         intersect_box_x1[i] - b1_x1[0],
+#                         intersect_box_y1[i] - b1_y1[0],
+#                         intersect_box_z1[i] - b1_z1[0],
+#                         intersect_box_x2[i] - b1_x1[0],
+#                         intersect_box_y2[i] - b1_y1[0],
+#                         intersect_box_z2[i] - b1_z1[0],
+#                         b2[i, -1],
+#                     ]
+#                 )
+#             else:
+#                 intersect_boxes.append(
+#                     [
+#                         intersect_box_x1[i],
+#                         intersect_box_y1[i],
+#                         intersect_box_z1[i],
+#                         intersect_box_x2[i],
+#                         intersect_box_y2[i],
+#                         intersect_box_z2[i],
+#                         b2[i, -1],
+#                     ]
+#                 )
+#     return intersect_boxes
+
+
+# def split_3d_patch(annotation_file: str, save_folder: str, save_files: bool):
+#     annotations: dict = load_json(annotation_file)
+#     # 记录patch
+#     patches = []
+#     for No, value in annotations.items():
+#         print(f"正在处理{No}...")
+#         # 标注图像大小
+#         shape = value["shape"]
+#         # 边界框
+#         boxes = []
+#         for v in value["annotations"]:
+#             if v["class"] == "fraction":
+#                 boxes.append(v["location"] + [0])
+#             elif v["class"] == "bladder":
+#                 boxes.append(v["location"] + [1])
+#         # 读取图像
+#         if save_files:
+#             ct = sitk.GetArrayFromImage(
+#                 sitk.ReadImage(os.path.join("Files/resampled_FRI", No + "_rCT.nii.gz"))
+#             )
+#             suv = sitk.GetArrayFromImage(
+#                 sitk.ReadImage(
+#                     os.path.join(
+#                         os.path.join("Files/resampled_FRI", No + "_rSUVbw.nii.gz")
+#                     )
+#                 )
+#             )
+#         # 分成 3D patch
+#         num_z = math.ceil(shape[0] / 96.0)
+#         num_y, dy = shape[1] // 96, (shape[1] % 96) // 2
+#         num_x, dx = shape[2] // 96, (shape[2] % 96) // 2
+#         for z in range(num_z):
+#             for y in range(num_y):
+#                 for x in range(num_x):
+#                     patch = {"id": "_".join([No, str(x), str(y), str(z)])}
+#                     if z != num_z - 1:
+#                         patch["patch"] = [
+#                             dx + x * 96,
+#                             dy + y * 96,
+#                             z * 96,
+#                             dx + x * 96 + 96,
+#                             dy + y * 96 + 96,
+#                             z * 96 + 96,
+#                         ]
+#                     else:
+#                         patch["patch"] = [
+#                             dx + x * 96,
+#                             dy + y * 96,
+#                             shape[0] - 96,
+#                             dx + x * 96 + 96,
+#                             dy + y * 96 + 96,
+#                             shape[0],
+#                         ]
+#                     patch["boxes"] = intersect_box(
+#                         np.array([patch["patch"]]), np.array(boxes)
+#                     )
+#                     patches.append(patch)
+#                     # 保存3d patch
+#                     if save_files:
+#                         print(f"=> 写入{x}-{y}-{z}")
+#                         ct_patch = ct[
+#                             patch["patch"][2] : patch["patch"][5],
+#                             patch["patch"][1] : patch["patch"][4],
+#                             patch["patch"][0] : patch["patch"][3],
+#                         ]
+#                         suv_patch = suv[
+#                             patch["patch"][2] : patch["patch"][5],
+#                             patch["patch"][1] : patch["patch"][4],
+#                             patch["patch"][0] : patch["patch"][3],
+#                         ]
+#                         # 写在临时文件夹下面，再移入相应文件夹
+#                         np.save(
+#                             os.path.join(save_folder, patch["id"] + "_ct.npy"),
+#                             np.array(ct_patch),
+#                         )
+#                         np.save(
+#                             os.path.join(save_folder, patch["id"] + "_suv.npy"),
+#                             np.array(suv_patch),
+#                         )
+#     return patches
+
+
+# save_folder = "Files/patch"
+# mkdir(save_folder)
+# patches = split_3d_patch("Files/resampled_FRI/annotations.json", save_folder, False)
+
+# train_patch_txt_path = os.path.join("Files", "train_patch.txt")
+# val_patch_txt_path = os.path.join("Files", "val_patch.txt")
+# output_folder = "model_data/image/patch"
+# with open("Files/train.txt") as f:
+#     train_lines = f.readlines()
+# Nos = [line.split()[0] for line in train_lines]
+
+
+# train_f = open(train_patch_txt_path, "w")
+# val_f = open(val_patch_txt_path, "w")
+# for patch in patches:
+#     p_id = patch["id"]
+#     file_no = p_id.split("_")[0]
+#     line = " ".join([p_id] + [",".join(list(map(str, box))) for box in patch["boxes"]])
+#     if file_no in Nos:
+#         train_f.write(line + "\n")
+#         train_f.flush()
+#     else:
+#         val_f.write(line + "\n")
+#         val_f.flush()
+# train_f.close()
+# val_f.close()

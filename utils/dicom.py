@@ -220,10 +220,14 @@ def resample(
 
     resamlper = sitk.ResampleImageFilter()
     resamlper.SetReferenceImage(target_image)
-    resamlper.SetOutputPixelType(sitk.sitkFloat32)
+    sitk.sitkIdentity
     if is_label:
+        resamlper.SetOutputPixelType(sitk.sitkFloat32)
+        # resamlper.SetOutputPixelType(sitk.sitkUInt16)
+        # resamlper.SetInterpolator(sitk.sitkIdentity)
         resamlper.SetInterpolator(sitk.sitkNearestNeighbor)
     else:
+        resamlper.SetOutputPixelType(sitk.sitkFloat32)
         # resamlper.SetInterpolator(sitk.sitkBSpline)
         resamlper.SetInterpolator(sitk.sitkLinear)
     return resamlper.Execute(image)
