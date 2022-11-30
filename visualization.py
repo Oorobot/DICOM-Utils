@@ -1,24 +1,33 @@
 import numpy as np
 import SimpleITK as sitk
 import vtk
+
 # noinspection PyUnresolvedReferences
 import vtkmodules.vtkInteractionStyle
+
 # noinspection PyUnresolvedReferences
 import vtkmodules.vtkRenderingOpenGL2
+
 # noinspection PyUnresolvedReferences
 import vtkmodules.vtkRenderingVolumeOpenGL2
 from vtkmodules.util.vtkImageImportFromArray import vtkImageImportFromArray
 from vtkmodules.vtkCommonColor import vtkNamedColors
 from vtkmodules.vtkCommonCore import vtkPoints
-from vtkmodules.vtkCommonDataModel import (vtkCellArray, vtkPiecewiseFunction,
-                                           vtkPolyData)
-from vtkmodules.vtkCommonTransforms import vtkTransform
-from vtkmodules.vtkRenderingAnnotation import vtkAxesActor
-from vtkmodules.vtkRenderingCore import (vtkActor, vtkColorTransferFunction,
-                                         vtkPolyDataMapper, vtkRenderer,
-                                         vtkRenderWindow,
-                                         vtkRenderWindowInteractor, vtkVolume,
-                                         vtkVolumeProperty)
+from vtkmodules.vtkCommonDataModel import (
+    vtkCellArray,
+    vtkPiecewiseFunction,
+    vtkPolyData,
+)
+from vtkmodules.vtkRenderingCore import (
+    vtkActor,
+    vtkColorTransferFunction,
+    vtkPolyDataMapper,
+    vtkRenderer,
+    vtkRenderWindow,
+    vtkRenderWindowInteractor,
+    vtkVolume,
+    vtkVolumeProperty,
+)
 from vtkmodules.vtkRenderingVolume import vtkFixedPointVolumeRayCastMapper
 
 from utils.dicom import ct2image
@@ -52,16 +61,16 @@ class KeyPressStyle(vtk.vtkInteractorStyleTrackballCamera):
             camera.SetPosition(*new_position.tolist())
 
 
-def flip_3D_annotation(image_size, point1, point2, axes):
+def flip_3D_annotation(image_size, point1, point2, axis):
     """
     image_size = (D, H, W): 三维物体的大小
     point1 = (z1, y1, x1): 三维标注中对角的第一个点
     point2 = (z2, y2, x2): 三维标注中对角的第二个点(x2>x1, y2>y1, z2>z1)
     axes: 沿哪个轴进行翻转
     """
-    assert axes == 0 or axes == 1 or axes == 2
-    point1[axes] = image_size[axes] - point1[axes]
-    point2[axes] = image_size[axes] - point2[axes]
+    assert axis == 0 or axis == 1 or axis == 2
+    point1[axis] = image_size[axis] - point1[axis]
+    point2[axis] = image_size[axis] - point2[axis]
     return point1, point2
 
 
@@ -79,8 +88,7 @@ def rot90_3D_annotation(image_size, point1, point2, k, axes):
     y2, x2 = point2[axes[0]], point2[axes[1]]
     H, W = image_size[axes[0]], image_size[axes[1]]
     if k == 0:
-        x1_, y1_ = x1, y1
-        x2_, y2_ = x2, y2
+        return point1, point2
     elif k == 1:
         x1_, y1_ = y1, W - x2
         x2_, y2_ = y2, W - x1
@@ -90,10 +98,43 @@ def rot90_3D_annotation(image_size, point1, point2, k, axes):
     elif k == 3:
         x1_, y1_ = H - y2, x1
         x2_, y2_ = H - y1, x2
-
     point1[axes[0]], point1[axes[1]] = y1_, x1_
     point2[axes[0]], point2[axes[1]] = y2_, x2_
     return point1, point2
+
+
+def flip(image_array: np.ndarray, boxes: list, axis=None):
+    if axis is None:
+        axis = np.random.randint(0, 4)
+        print("axis: ", axis)
+    axis = axis % 3
+    array = np.flip(image_array, axis)
+    b = []
+    for box in boxes:
+        point1 = list(reversed(box[0:3]))
+        point2 = list(reversed(box[3:6]))
+        point1, point2 = flip_3D_annotation(image_array.shape, point1, point2, axis)
+        b.append(list(reversed(point1)) + list(reversed(point2)))
+    return array, b
+
+
+def rot90(image_array: np.ndarray, boxes: list, k=None, axes=None):
+    if k is None:
+        k = np.random.randint(1, 4)
+        print("k: ", k)
+    if axes is None:
+        choosed_axes = [(0, 1), (0, 2), (1, 2)]
+        axes = choosed_axes[np.random.randint(0, 3)]
+        print("axes: ", axes)
+    k = k % 4
+    array = np.rot90(image_array, k, axes)
+    b = []
+    for box in boxes:
+        point1 = list(reversed(box[0:3]))
+        point2 = list(reversed(box[3:6]))
+        point1, point2 = rot90_3D_annotation(image_array.shape, point1, point2, k, axes)
+        b.append(list(reversed(point1)) + list(reversed(point2)))
+    return array, b
 
 
 def index_to_physical_position(boxes, origin, spacing):
@@ -130,6 +171,14 @@ print(
 print(
     f"SUV size: {suv_image.GetSize()}, origin: {suv_image.GetOrigin()}, spacing: {suv_image.GetSpacing()}."
 )
+spacing = ct_image.GetSpacing()
+# 读取标注文件
+annotations_path = "./Files/annotations.json"
+annotations = load_json(annotations_path)
+annotation = annotations["001"]["annotations"]
+
+# 定位框的颜色
+annotation_colors = {"fraction": "Red", "bladder": "Blue", "Other": "Green"}
 
 # 自定义原点
 origin = (0.0, 0.0, 0.0)
@@ -137,49 +186,21 @@ origin = (0.0, 0.0, 0.0)
 # 图像预处理
 ct_array = sitk.GetArrayFromImage(ct_image)
 suv_array = sitk.GetArrayFromImage(suv_image)
-
 ct_array = ct2image(ct_array, 300.0, 1500.0) * 1500.0
 suv_array[suv_array < 0] = 0
 
 
-""""""
-k = 3
-axes = (0, 2)
-# array = np.flip(array, 0)
-# array = np.flip(array, 2)
-shape = array.shape
-array = np.rot90(array, k, axes)
-array = sitk.GetArrayFromImage(sitk.GetImageFromArray(array))
+# 获取定位框的坐标和颜色
+boxes = [a["location"] for a in annotation]
+box_colors = [annotation_colors[a["class"]] for a in annotation]
 
-# 读取标注文件
-annotations_path = "./Files/annotations.json"
-annotations = load_json(annotations_path)
-annotation = annotations["001"]["annotations"]
-physical_points = []
-for a in annotation:
-    point1 = np.array(a["location"][0:3])
-    point2 = np.array(a["location"][3:6])
-    x1, y1, z1 = origin + point1 * spacing - spacing * 0.5
-    x2, y2, z2 = origin + point2 * spacing - spacing * 0.5
-    (z1, y1, x1), (z2, y2, x2) = rot90_3D_annotation(
-        shape, [z1, y1, x1], [z2, y2, x2], k, axes
-    )
-    physical_points.append(
-        {
-            "class": a["class"],
-            "points": [
-                [x1, y1, z1],
-                [x1, y2, z1],
-                [x2, y2, z1],
-                [x2, y1, z1],
-                [x1, y1, z2],
-                [x1, y2, z2],
-                [x2, y2, z2],
-                [x2, y1, z2],
-            ],
-        }
-    )
-class_colors = {"fraction": "Red", "bladder": "Blue", "Other": "Green"}
+
+# 翻转和旋转
+array, b = rot90(ct_array, boxes, 1, (0, 2))
+array = sitk.GetArrayFromImage(sitk.GetImageFromArray(array))
+physical_points = index_to_physical_position(b, origin, spacing)
+
+
 # 创建渲染器，渲染窗口和交互工具. 渲染器画入在渲染窗口里，交互工具可以开启基于鼠标和键盘的与场景的交互能力
 ren = vtkRenderer()
 ren_win = vtkRenderWindow()
@@ -190,15 +211,6 @@ iren.SetRenderWindow(ren_win)
 ren_win.Render()
 iren.SetInteractorStyle(KeyPressStyle())
 
-# def main():
-#     ren1 = vtk.vtkRenderer()
-#     renWin = vtk.vtkRenderWindow()
-#     renWin.AddRenderer(ren1)
-#     iren = vtk.vtkRenderWindowInteractor()
-#     iren.SetRenderWindow(renWin)
-
-#     renWin.Render()
-#     iren.SetInteractorStyle(vtk.KeyPressStyle())
 
 # 创建 vtk 颜色
 colors = vtkNamedColors()
@@ -255,20 +267,12 @@ volume.SetProperty(volume_property)
 
 ren.AddViewProp(volume)
 
-# # 添加坐标轴
-# axes = vtkAxesActor()
-# # 使用用户变化来定位坐标轴
-# transform = vtkTransform()
-# transform.Translate(0.0, 0.0, 430.0)
-# axes.SetUserTransform(transform)
-# ren.AddActor(axes)
-
 # 添加立方体框
-for p_p in physical_points:
+for p, c in zip(physical_points, box_colors):
     points = vtkPoints()
     points.SetNumberOfPoints(8)
     for i in range(8):
-        points.SetPoint(i, *p_p["points"][i])
+        points.SetPoint(i, *p[i])
     lines = vtkCellArray()
     lines.InsertNextCell(5)
     lines.InsertCellPoint(0)
@@ -305,7 +309,7 @@ for p_p in physical_points:
 
     polygonActor = vtkActor()
     polygonActor.SetMapper(polygonMapper)
-    polygonActor.GetProperty().SetColor(colors.GetColor3d(class_colors[p_p["class"]]))
+    polygonActor.GetProperty().SetColor(colors.GetColor3d(c))
 
     ren.AddActor(polygonActor)
 
