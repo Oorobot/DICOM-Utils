@@ -17,16 +17,9 @@ from mpl_toolkits.mplot3d import Axes3D
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 from skimage import measure
 
-from utils.dicom import (
-    get_3D_annotation,
-    get_patient_info,
-    get_pixel_array,
-    get_pixel_value,
-    get_SUVbw_in_GE,
-    read_serises_image,
-    resample,
-    resample_spacing,
-)
+from utils.dicom import (get_3D_annotation, get_patient_info, get_pixel_array,
+                         get_pixel_value, get_SUVbw_in_GE, read_serises_image,
+                         resample, resample_spacing)
 from utils.utils import delete, load_json, mkdir, rename, save_json, to_pinyin
 
 folder_name = "D:/admin/Desktop/Data/PETCT-FRI/NormalData"
@@ -34,14 +27,22 @@ fri_xlsx = "D:/admin/Desktop/Data/PETCT-FRI/PET-FRI.xlsx"
 
 
 """将label重采样到CT大小"""
-# no = "098"
-# print("正在处理" + no)
-# ct = os.path.join(folder_name, no, f"{no}_CT.nii.gz")
-# ct_image = sitk.ReadImage(ct)
-# label = sitk.ReadImage(os.path.join(folder_name, no, "Untitled.nii.gz"))
-# resample_label = resample(label, ct_image, True)
-# sitk.WriteImage(resample_label, os.path.join(folder_name, no, f"{no}_CT_Label.nii.gz"))
-
+# with zipfile.ZipFile("D:\\admin\\Desktop\\已标注未修订数据\\数据标注（819-887）.zip") as zip:
+#     files = zip.namelist()
+#     for file in files:
+#         if ".nii.gz" in file:
+#             print(file)
+#             filename = zip.extract(file, "./Files/Label")
+#             no = os.path.basename(filename)[:3]
+#             # 重采样
+#             ct = os.path.join(folder_name, no, f"{no}_CT.nii.gz")
+#             ct_image = sitk.ReadImage(ct)
+#             label = sitk.ReadImage(filename)
+#             resample_label = resample(label, ct_image, True)
+#             sitk.WriteImage(
+#                 resample_label, os.path.join(folder_name, no, f"{no}_CT_Label.nii.gz")
+#             )
+# shutil.rmtree("./Files/Label")
 """数据处理"""
 # for dir in os.listdir(folder_name):
 #     # 读取PET数据，进行重采样，得到SUVbw样本
@@ -129,65 +130,65 @@ fri_xlsx = "D:/admin/Desktop/Data/PETCT-FRI/PET-FRI.xlsx"
 # for folder in folders:
 #     niigzs = glob(os.path.join(folder_name, folder, "*.nii.gz"))
 #     if len(niigzs) == 2:
-#         # print(folder)
+#         print(folder, end="\t")
 #         collected.append(folder)
 #     label_path = os.path.join(folder_name, folder, f"{folder}_CT_Label.nii.gz")
-#     try:
-#         label = get_pixel_value(label_path)
-#         if np.max(label) > 2:
-#             print("folder: ", folder)
-#     except:
-#         pass
+#     # try:
+#     #     label = get_pixel_value(label_path)
+#     #     if np.max(label) > 2:
+#     #         print("folder: ", folder)
+#     # except:
+#     #     pass
 # print("num: ", len(collected))
 
 """修改标签"""
-folders = os.listdir(folder_name)
-labels = glob(os.path.join(folder_name, "*", "*Label.nii.gz"))
-patient_info = pd.read_excel(fri_xlsx, sheet_name="FRI-unique")
+# folders = os.listdir(folder_name)
+# labels = glob(os.path.join(folder_name, "*", "*Label.nii.gz"))
+# patient_info = pd.read_excel(fri_xlsx, sheet_name="FRI-unique")
 
-three2one = ["125"]
-three2two = ["074", "102", "194", "345", "402", "414", "447", "615"]
-three2four = ["024", "037", "045", "082", "089", "014", "108", "597"]
-four2one = ["109"]
-for label in labels:
-    print(f"处理 {label} ……")
-    no = os.path.basename(os.path.dirname(label))
-    int_no = int(no)
-    # 根据编号查询感染情况
-    is_infected = np.squeeze(
-        patient_info.query(f"No==@int_no")[["Final_diagnosis"]].values
-    )
+# three2one = ["125"]
+# three2two = ["074", "102", "194", "345", "402", "414", "447", "615"]
+# three2four = ["024", "037", "045", "082", "089", "014", "108", "597"]
+# four2one = ["109"]
+# for label in labels:
+#     print(f"处理 {label} ……")
+#     no = os.path.basename(os.path.dirname(label))
+#     int_no = int(no)
+#     # 根据编号查询感染情况
+#     is_infected = np.squeeze(
+#         patient_info.query(f"No==@int_no")[["Final_diagnosis"]].values
+#     )
 
-    label_image = sitk.ReadImage(label)
-    label_array = sitk.GetArrayFromImage(label_image)
+#     label_image = sitk.ReadImage(label)
+#     label_array = sitk.GetArrayFromImage(label_image)
 
-    # 深层复制 array, 用于修改标签, 以避免来回修改
-    copy_array = copy.deepcopy(label_array)
-    # 进行转换
-    if no in three2one:
-        label_array[copy_array == 3] = 1
-    if no in three2two:
-        label_array[copy_array == 3] = 2
-    if no in three2four:
-        label_array[copy_array == 3] = 4
-    if no in four2one:
-        label_array[copy_array == 4] = 1
+#     # 深层复制 array, 用于修改标签, 以避免来回修改
+#     copy_array = copy.deepcopy(label_array)
+#     # 进行转换
+#     if no in three2one:
+#         label_array[copy_array == 3] = 1
+#     if no in three2two:
+#         label_array[copy_array == 3] = 2
+#     if no in three2four:
+#         label_array[copy_array == 3] = 4
+#     if no in four2one:
+#         label_array[copy_array == 4] = 1
 
-    # 将 bladder 转换 2 -> 3
-    label_array[copy_array == 2] = 3
+#     # 将 bladder 转换 2 -> 3
+#     label_array[copy_array == 2] = 3
 
-    # 将病灶区域转换为 感染区域 1 和 非感染区域 2
-    if is_infected == "F":
-        label_array[copy_array == 1] = 2
+#     # 将病灶区域转换为 感染区域 1 和 非感染区域 2
+#     if is_infected == "F":
+#         label_array[copy_array == 1] = 2
 
-    # array 转换回 image
-    changed_image = sitk.GetImageFromArray(label_array)
+#     # array 转换回 image
+#     changed_image = sitk.GetImageFromArray(label_array)
 
-    changed_image.CopyInformation(label_image)
-    # print("===> label image: \n", label_image, "===> changed image: \n", changed_image)
-    sitk.WriteImage(
-        changed_image, os.path.join(folder_name, no, f"{no}_CT_Label_new.nii.gz")
-    )
+#     changed_image.CopyInformation(label_image)
+#     # print("===> label image: \n", label_image, "===> changed image: \n", changed_image)
+#     sitk.WriteImage(
+#         changed_image, os.path.join(folder_name, no, f"{no}_CT_Label_new.nii.gz")
+#     )
 
 
 # def intersect_box(b1: np.ndarray, b2: np.ndarray, based_b1_correct_box: bool = True):
