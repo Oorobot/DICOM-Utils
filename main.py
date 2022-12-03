@@ -13,13 +13,18 @@ import pandas as pd
 import pydicom
 import SimpleITK as sitk
 from mlxtend.evaluate import mcnemar, mcnemar_table  # 用于计算显著性水平 p
-from mpl_toolkits.mplot3d import Axes3D
-from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 from skimage import measure
 
-from utils.dicom import (get_3D_annotation, get_patient_info, get_pixel_array,
-                         get_pixel_value, get_SUVbw_in_GE, read_serises_image,
-                         resample, resample_spacing)
+from utils.dicom import (
+    get_3D_annotation,
+    get_patient_info,
+    get_pixel_array,
+    get_pixel_value,
+    get_SUVbw_in_GE,
+    read_serises_image,
+    resample,
+    resample_spacing,
+)
 from utils.utils import delete, load_json, mkdir, rename, save_json, to_pinyin
 
 folder_name = "D:/admin/Desktop/Data/PETCT-FRI/NormalData"
@@ -27,7 +32,7 @@ fri_xlsx = "D:/admin/Desktop/Data/PETCT-FRI/PET-FRI.xlsx"
 
 
 """将label重采样到CT大小"""
-# with zipfile.ZipFile("D:\\admin\\Desktop\\已标注未修订数据\\数据标注（819-887）.zip") as zip:
+# with zipfile.ZipFile("D:\\admin\\Desktop\\已标注未修订数据\\215-327 (2).zip") as zip:
 #     files = zip.namelist()
 #     for file in files:
 #         if ".nii.gz" in file:
@@ -38,9 +43,10 @@ fri_xlsx = "D:/admin/Desktop/Data/PETCT-FRI/PET-FRI.xlsx"
 #             ct = os.path.join(folder_name, no, f"{no}_CT.nii.gz")
 #             ct_image = sitk.ReadImage(ct)
 #             label = sitk.ReadImage(filename)
+#             print(np.max(sitk.GetArrayFromImage(label)))
 #             resample_label = resample(label, ct_image, True)
 #             sitk.WriteImage(
-#                 resample_label, os.path.join(folder_name, no, f"{no}_CT_Label.nii.gz")
+#                 resample_label, os.path.join("./Files/Label", f"{no}_CT_Label.nii.gz")
 #             )
 # shutil.rmtree("./Files/Label")
 """数据处理"""
@@ -133,12 +139,12 @@ fri_xlsx = "D:/admin/Desktop/Data/PETCT-FRI/PET-FRI.xlsx"
 #         print(folder, end="\t")
 #         collected.append(folder)
 #     label_path = os.path.join(folder_name, folder, f"{folder}_CT_Label.nii.gz")
-#     # try:
-#     #     label = get_pixel_value(label_path)
-#     #     if np.max(label) > 2:
-#     #         print("folder: ", folder)
-#     # except:
-#     #     pass
+#     try:
+#         label = get_pixel_value(label_path)
+#         if np.max(label) > 2:
+#             print("folder: ", folder)
+#     except:
+#         pass
 # print("num: ", len(collected))
 
 """修改标签"""
