@@ -1,3 +1,4 @@
+import matplotlib as mpl
 import numpy as np
 import SimpleITK as sitk
 import vtk
@@ -143,8 +144,8 @@ def index_to_physical_position(boxes, origin, spacing):
     spacing = np.array(spacing)
     for box in boxes:
         point1, point2 = np.array(box[0:3]), np.array(box[3:6])
-        x1, y1, z1 = origin + point1 * spacing - spacing * 0.5
-        x2, y2, z2 = origin + point2 * spacing - spacing * 0.5
+        x1, y1, z1 = origin + point1 * spacing
+        x2, y2, z2 = origin + point2 * spacing
         physical_positions.append(
             [
                 [x1, y1, z1],
@@ -179,6 +180,9 @@ annotation = annotations["001"]["annotations"]
 
 # 定位框的颜色
 annotation_colors = {"fraction": "Red", "bladder": "Blue", "Other": "Green"}
+# SUVbw color map
+hot_cmap = mpl.cm.get_cmap("hot")
+hot_colors = hot_cmap(np.linspace(0, 1, hot_cmap.N))
 
 # 自定义原点
 origin = (0.0, 0.0, 0.0)

@@ -214,6 +214,14 @@ def ct2image(
     return image
 
 
+def suvbw2image(pixel_value: np.ndarray, suvbw_max: float, to_uint8: bool = False):
+    np.clip(pixel_value, 0, suvbw_max, pixel_value)
+    image = pixel_value / suvbw_max
+    if to_uint8:
+        image = (image * 255).astype(np.uint8)
+    return image
+
+
 def resample(
     image: sitk.Image, target_image: sitk.Image, is_label: bool = False
 ) -> sitk.Image:

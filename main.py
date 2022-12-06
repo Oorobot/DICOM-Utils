@@ -368,3 +368,189 @@ fri_xlsx = "D:/admin/Desktop/Data/PETCT-FRI/PET-FRI.xlsx"
 #         val_f.flush()
 # train_f.close()
 # val_f.close()
+
+
+# suvs = glob(os.path.join("Files", "resampled_FRI", "*rSUVbw.nii.gz"))
+# cts = glob(os.path.join("Files", "resampled_FRI", "*rCT.nii.gz"))
+
+# # ct_path = "Files/resampled_FRI/001_rCT.nii.gz"
+# # suv_path = "Files/resampled_FRI/001_rSUVbw.nii.gz"
+
+# for ct, suv in zip(cts, suvs):
+#     ct_no = os.path.basename(ct).split("_")[0]
+#     suv_no = os.path.basename(suv).split("_")[0]
+#     assert ct_no == suv_no
+
+#     suv_image = sitk.ReadImage(suv)
+#     suv_array = sitk.GetArrayFromImage(suv_image)
+#     ct_image = sitk.ReadImage(ct)
+#     ct_array = sitk.GetArrayFromImage(ct_image)
+
+#     x1, y1 = 1000, 1000
+#     x2, y2 = -1, -1
+
+#     for suv_slice in suv_array:
+#         binary = np.zeros_like(suv_slice, dtype=np.uint8)
+#         binary[suv_slice > 1e-2] = 1
+#         contours, _ = cv2.findContours(binary, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+#         for contour in contours:
+#             contour = np.squeeze(contour, 1)
+#             if len(contour) < 66:
+#                 continue
+#             x1_, y1_ = np.min(contour, axis=0)
+#             x2_, y2_ = np.max(contour, axis=0)
+#             x1 = x1_ if x1_ < x1 else x1
+#             y1 = y1_ if y1_ < y1 else y1
+#             x2 = x2_ if x2_ > x2 else x2
+#             y2 = y2_ if y2_ > y2 else y2
+
+#     print("[x-y] x1: ", x1, ", y1: ", y1, ", x2: ", x2, ", y2: ", y2)
+
+#     sitk.WriteImage(
+#         sitk.GetImageFromArray(suv_array[:, y1 : y2 + 1, x1 : x2 + 1]),
+#         f"./Files/{suv_no}_rSUVbw_xz.nii.gz",
+#     )
+#     sitk.WriteImage(
+#         sitk.GetImageFromArray(ct_array[:, y1 : y2 + 1, x1 : x2 + 1]),
+#         f"./Files/{ct_no}_rCT_xz.nii.gz",
+#     )
+
+# yz_contour = None
+# xz_contour = None
+# for i in range(suv_array.shape[2]):
+#     yz_slice = suv_array[:, :, i]
+#     binary = np.zeros_like(yz_slice, dtype=np.uint8)
+#     binary[yz_slice > 1e-2] = 1
+#     contours, _ = cv2.findContours(binary, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+#     for contour in contours:
+#         contour = np.squeeze(contour, 1)
+#         if yz_contour is None or len(contour) > len(yz_contour):
+#             yz_contour = contour
+# y1, z1 = np.min(yz_contour, axis=0)
+# y2, z2 = np.max(yz_contour, axis=0)
+# print("[y-z] y1: ", y1, "y1: ", z1, "y2: ", y2, "z2: ", z2)
+
+# for i in range(suv_array.shape[1]):
+#     xz_slice = suv_array[:, i, :]
+#     binary = np.zeros_like(yz_slice, dtype=np.uint8)
+#     binary[xz_slice > 1e-2] = 1
+#     contours, _ = cv2.findContours(binary, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+#     for contour in contours:
+#         contour = np.squeeze(contour, 1)
+#         if xz_contour is None or len(contour) > len(yz_contour):
+#             xz_contour = contour
+# x1, z1 = np.min(xz_contour, axis=0)
+# x2, z2 = np.max(xz_contour, axis=0)
+# print("[x-y] x1: ", x1, "z1: ", z1, "x2: ", x2, "z2: ", z2)
+# sitk.WriteImage(
+#     sitk.GetImageFromArray(suv_array[:, y1 : y2 + 1, x1 : x2 + 1]),
+#     "./Files/001_yz_xz.nii.gz",
+# )
+
+
+def get_max_component(mask_image: sitk.Image) -> sitk.Image:
+    # 得到mask中的多个连通量
+    cc_filter = sitk.ConnectedComponentImageFilter()
+    cc_filter.SetNumberOfThreads(8)
+    cc_filter.SetFullyConnected(True)
+
+    output_image = cc_filter.Execute(mask_image)
+
+    # 计算不同连通图的大小
+    lss_filter = sitk.LabelShapeStatisticsImageFilter()
+    lss_filter.SetNumberOfThreads(8)
+    lss_filter.Execute(output_image)
+
+    label_num = cc_filter.GetObjectCount()
+    max_label = 0
+    max_num = 0
+
+    for i in range(1, label_num + 1):
+        num = lss_filter.GetNumberOfPixels(i)
+        if num > max_num:
+            max_label = i
+            max_num = num
+    output_array = sitk.GetArrayFromImage(output_image)
+    max_component = (output_array == max_label).astype(np.uint8)
+
+    max_component_image = sitk.GetImageFromArray(max_component)
+    max_component_image.CopyInformation(mask_image)
+
+    return max_component_image
+
+
+def get_binary_image(ct_image: sitk.Image, threshold: int = -200) -> sitk.Image:
+    """
+    CT threshold = -200, SUVbw threshold = 1e-2
+    """
+    ct_array = sitk.GetArrayFromImage(ct_image)
+    binary_ct_array = (ct_array > threshold).astype(np.uint8)
+    binary_ct_image = sitk.GetImageFromArray(binary_ct_array)
+    binary_ct_image.CopyInformation(ct_image)
+    return binary_ct_image
+
+
+def get_binary_morphological_closing(mask_image: sitk.Image):
+    bmc_filter = sitk.BinaryMorphologicalClosingImageFilter()
+    bmc_filter.SetKernelType(sitk.sitkBall)
+    bmc_filter.SetKernelRadius(2)
+    bmc_filter.SetForegroundValue(1)
+    bmc_filter.SetNumberOfThreads(8)
+    return bmc_filter.Execute(mask_image)
+
+
+def get_body(ct_image: sitk.Image, suv_image: sitk.Image):
+    ct_binary = get_binary_image(ct_image, -200)
+    suv_binary = get_binary_image(suv_image, 1e-2)
+
+    ct_binary_closing = get_binary_morphological_closing(ct_binary)
+    sitk.WriteImage(ct_binary_closing, "./Files/ct_binary_closing.nii.gz")
+    ct_binary_closing_max = get_max_component(ct_binary_closing)
+    sitk.WriteImage(ct_binary_closing_max, "./Files/ct_binary_closing_max.nii.gz")
+    # 使用闭包
+    suv_binary_closing = get_binary_morphological_closing(suv_binary)
+    sitk.WriteImage(suv_binary_closing, "./Files/suv_binary_closing.nii.gz")
+    suv_binary_closing_max = get_max_component(suv_binary)
+    sitk.WriteImage(suv_binary_closing_max, "./Files/suv_binary_closing_max.nii.gz")
+
+    # machine mask = ct mask - suv mask
+    machine_mask = sitk.And(ct_binary_closing_max, sitk.Not(suv_binary_closing_max))
+    sitk.WriteImage(machine_mask, "./Files/machine_mask.nii.gz")
+
+    machine_mask_closing = get_binary_morphological_closing(machine_mask)
+    sitk.WriteImage(machine_mask_closing, "./Files/machine_mask_closing.nii.gz")
+    machine_mask_closing_max = get_max_component(machine_mask_closing)
+    sitk.WriteImage(machine_mask_closing_max, "./Files/machine_mask_closing_max.nii.gz")
+
+    # body mask = ct mask - machine mask
+    body_mask = sitk.And(ct_binary_closing_max, sitk.Not(machine_mask_closing_max))
+    sitk.WriteImage(body_mask, "./Files/ct-machine.nii.gz")
+
+    # final body mask = body mask and suv mask
+    body_mask_and = sitk.And(body_mask, suv_binary_closing_max)
+    sitk.WriteImage(body_mask_and, "./Files/ct-machine_and_suv.nii.gz")
+
+    # body mask = suv mask - machine mask
+    body_mask = sitk.And(ct_binary_closing_max, sitk.Not(machine_mask_closing_max))
+    sitk.WriteImage(body_mask, "./Files/suv-machine.nii.gz")
+
+    # final body mask = body mask and suv mask
+    body_mask_and = sitk.And(body_mask, ct_binary_closing_max)
+    sitk.WriteImage(body_mask_and, "./Files/suv-machine_and_ct.nii.gz")
+
+    # # 异或
+    # # xor_image = sitk.Xor(ct_max_component, suv_max_component)
+    # # sitk.WriteImage(xor_image, "./Files/xor_image.nii.gz")
+    # # 使用闭包
+    # xor_closing = get_binary_morphological_closing(xor_image)
+    # sitk.WriteImage(xor_closing, "./Files/xor_closing.nii.gz")
+    # # 获得最大连通量
+    # xor_closing_max = get_max_component(xor_closing)
+    # sitk.WriteImage(xor_closing_max, "./Files/xor_closing_max.nii.gz")
+
+
+CT = "Files/resampled_FRI/031_rCT.nii.gz"
+SUVbw = "Files/resampled_FRI/031_rSUVbw.nii.gz"
+ct_image = sitk.ReadImage(CT)
+suv_image = sitk.ReadImage(SUVbw)
+get_body(ct_image, suv_image)
