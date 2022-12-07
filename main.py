@@ -95,6 +95,7 @@ def get_body(
     ct_image: sitk.Image,
     suv_image: sitk.Image,
 ):
+    # CT(去除机床) = CT binary ∩ SUV binary; CT(去除伪影) = CT binary ∪ SUV binary;
     ct_binary = get_binary_image(ct_image, -200)
     suv_binary = get_binary_image(suv_image, 3e-2)
 
@@ -102,6 +103,13 @@ def get_body(
     ct_binary_closing_max = get_max_component(
         get_binary_morphological_closing(ct_binary)
     )
+    ct_binary_closing_max_dilate = sitk.BinaryDilate(
+        ct_binary_closing_max,
+        kernelRadius=(2, 3, 3),
+        foregroundValue=1,
+        boundaryToForeground=True,
+    )
+    sitk.WriteImage(ct_binary_closing_max_dilate, "ct_binary_closing_max_dilate.nii.gz")
     # 对SUV进行闭操作，取最大连通量
     suv_binary_closing_max = get_max_component(
         get_binary_morphological_closing(suv_binary)
@@ -110,7 +118,9 @@ def get_body(
     # total mask = ct mask ∪ suv mask
     total_mask = sitk.Or(ct_binary_closing_max, suv_binary_closing_max)
     # machine mask = ct mask - suv mask
-    machine_mask = sitk.And(total_mask, sitk.Not(suv_binary_closing_max))
+    machine_mask = sitk.And(
+        ct_binary_closing_max_dilate, sitk.Not(suv_binary_closing_max)
+    )
 
     # 对 machine mask 进行闭包
     machine_mask_closing = get_binary_morphological_closing(machine_mask)
@@ -135,22 +145,40 @@ def get_body(
     return body_mask_closing
 
 
-if __name__ == "__main__":
-    folders = os.listdir(folder_name)
-    for folder in folders:
-        print(f"=> 开始处理 {folder}")
-        ct_path = os.path.join(folder_name, folder, f"{folder}_CT.nii.gz")
-        suv_path = os.path.join(folder_name, folder, f"{folder}_SUVbw.nii.gz")
-
-        ct_image = sitk.ReadImage(ct_path)
-        suv_image = sitk.ReadImage(suv_path)
-
-        print("==> 进行重采样")
-        # 将SUV图像重采样到与CT相同大小
-        resampled_suv_image = resample(suv_image, ct_image)
-        print("==> 计算 body mask closing max")
-        body_mask = get_body(ct_image, resampled_suv_image)
-        print("==> 写入 body mask closing max")
-        sitk.WriteImage(
-            body_mask, f"./Files/body_mask/{folder}_body_closing_max.nii.gz"
+def preprosses_based_body_mask(body_mask: np.ndarray):
+    y1_, x1_ = body_mask.shape[1:]
+    y2_, x2_ = -1, -1
+    for slice in body_mask:
+        contours = cv2.findContours(
+            slice.astype(np.uint8),
+            cv2.RETR_LIST,
+            cv2.CHAIN_APPROX_NONE,
         )
+        for contour in contours:
+            contour = np.squeeze(contour, axis=1)
+            x1, y1 = np.min(contour, axis=0)
+            x2, y2 = np.max(contour, axis=0)
+            x1_ = x1 if x1 < x1_ else x1_
+            y1_ = y1 if y1 < y1_ else y1_
+            x2_ = x2 if x2 < x2_ else x2_
+            y2_ = y2 if y2 < y2_ else y2_
+    return x1_, y1_, x2_, y2_
+
+
+""" 批量计算 body_mask   """
+folders = os.listdir(folder_name)
+for folder in folders:
+    print(f"=> 开始处理 {folder}")
+    ct_path = os.path.join(folder_name, folder, f"{folder}_CT.nii.gz")
+    suv_path = os.path.join(folder_name, folder, f"{folder}_SUVbw.nii.gz")
+
+    ct_image = sitk.ReadImage(ct_path)
+    suv_image = sitk.ReadImage(suv_path)
+
+    print("==> 进行重采样")
+    # 将SUV图像重采样到与CT相同大小
+    resampled_suv_image = resample(suv_image, ct_image)
+    print("==> 计算 body mask closing max")
+    body_mask = get_body(ct_image, resampled_suv_image)
+    print("==> 写入 body mask closing max")
+    sitk.WriteImage(body_mask, f"./Files/body_mask2/{folder}_body_closing_max.nii.gz")
