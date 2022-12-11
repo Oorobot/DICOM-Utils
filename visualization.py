@@ -162,8 +162,10 @@ def index_to_physical_position(boxes, origin, spacing):
 
 
 # 读取 CT 或者 SUVbw 文件
-ct_path = "Files/resampled_FRI/001_rCT.nii.gz"
-suv_path = "Files/resampled_FRI/001_rSUVbw.nii.gz"
+# ct_path = "Files/resampled_FRI/001_rCT.nii.gz"
+# suv_path = "Files/resampled_FRI/001_rSUVbw.nii.gz"
+ct_path = "001.nii.gz"
+suv_path = "001_.nii.gz"
 ct_image = sitk.ReadImage(ct_path)
 suv_image = sitk.ReadImage(suv_path)
 print(
@@ -174,9 +176,9 @@ print(
 )
 spacing = ct_image.GetSpacing()
 # 读取标注文件
-annotations_path = "./Files/annotations.json"
-annotations = load_json(annotations_path)
-annotation = annotations["001"]["annotations"]
+# annotations_path = "./Files/annotations.json"
+# annotations = load_json(annotations_path)
+# annotation = annotations["001"]["annotations"]
 
 # 定位框的颜色
 annotation_colors = {"fraction": "Red", "bladder": "Blue", "Other": "Green"}
@@ -195,12 +197,15 @@ suv_array[suv_array < 0] = 0
 
 
 # 获取定位框的坐标和颜色
-boxes = [a["location"] for a in annotation]
-box_colors = [annotation_colors[a["class"]] for a in annotation]
+# boxes = [a["location"] for a in annotation]
+# box_colors = [annotation_colors[a["class"]] for a in annotation]
+
+boxes = [[41, 80, 72, 78, 102, 96], [82, 70, 113, 111, 97, 117]]
+box_colors = ["Red", "Blue"]
 
 
 # 翻转和旋转
-array, b = rot90(ct_array, boxes, 1, (0, 2))
+array, b = rot90(ct_array, boxes, 0, (0, 2))
 array = sitk.GetArrayFromImage(sitk.GetImageFromArray(array))
 physical_points = index_to_physical_position(b, origin, spacing)
 

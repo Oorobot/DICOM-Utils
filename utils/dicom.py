@@ -1,3 +1,4 @@
+import math
 from datetime import datetime
 from typing import List, Tuple
 
@@ -222,52 +223,69 @@ def suvbw2image(pixel_value: np.ndarray, suvbw_max: float, to_uint8: bool = Fals
     return image
 
 
-def resample(
+def resample_based_target_image(
     image: sitk.Image, target_image: sitk.Image, is_label: bool = False
 ) -> sitk.Image:
-
-    resamlper = sitk.ResampleImageFilter()
-    resamlper.SetReferenceImage(target_image)
-    sitk.sitkIdentity
-    if is_label:
-        resamlper.SetOutputPixelType(sitk.sitkFloat32)
-        # resamlper.SetOutputPixelType(sitk.sitkUInt16)
-        # resamlper.SetInterpolator(sitk.sitkIdentity)
-        resamlper.SetInterpolator(sitk.sitkNearestNeighbor)
-    else:
-        resamlper.SetOutputPixelType(sitk.sitkFloat32)
-        # resamlper.SetInterpolator(sitk.sitkBSpline)
-        resamlper.SetInterpolator(sitk.sitkLinear)
-    return resamlper.Execute(image)
+    outputPixelType = sitk.sitkInt64 if is_label else sitk.sitkFloat32
+    return sitk.Resample(
+        image,
+        target_image,
+        outputPixelType=outputPixelType,
+        useNearestNeighborExtrapolator=is_label,
+    )
 
 
-def resample_spacing(image, output_spacing=(1.0, 1.0, 1.0)):
+def resample_based_spacing(
+    image: sitk.Image, output_spacing: list, is_label: bool = False
+):
     """
-    将体数据重采样的指定的spacing大小
-    image: sitk读取的image信息, 这里是体数据
-    outpacing: 指定的spacing, 默认: (1.0, 1.0, 1.0)
+    将体数据重采样的指定的 spacing 大小
+    image: sitk 读取的 image 信息, 这里是体数据
+    output_spacing: 指定的 spacing
     return: 重采样后的数据
     """
 
     # 读取文件的size和spacing信息
     input_size = image.GetSize()
     input_spacing = image.GetSpacing()
-
-    transform = sitk.Transform()
-    transform.SetIdentity()
     # 计算改变spacing后的size，用物理尺寸/体素的大小
-    outsize = [
-        round(input_size[i] * input_spacing[i] / output_spacing[i]) for i in range(3)
+    output_size = [
+        math.ceil(input_size[i] * input_spacing[i] / output_spacing[i])
+        for i in range(3)
     ]
-    # 设定重采样的一些参数
-    resampler = sitk.ResampleImageFilter()
-    resampler.SetTransform(transform)
-    resampler.SetInterpolator(sitk.sitkLinear)
-    resampler.SetOutputOrigin(image.GetOrigin())
-    resampler.SetOutputDirection(image.GetDirection())
-    resampler.SetOutputSpacing(output_spacing)
-    resampler.SetSize(outsize)
-    return resampler.Execute(image)
+    return sitk.Resample(
+        image,
+        size=output_size,
+        outputOrigin=image.GetOrigin(),
+        outputSpacing=output_spacing,
+        outputPixelType=image.GetPixelID(),
+        outputDirection=image.GetDirection(),
+        useNearestNeighborExtrapolator=is_label,
+    )
+
+
+def resameple_based_size(image: sitk.Image, output_size: list, is_label: bool = False):
+    """
+    将体数据重采样的指定的 size
+    image: sitk 读取的 image 信息, 这里是体数据
+    output_size: 指定的 size
+    return: 重采样后的数据
+    """
+    # 读取文件的size
+    input_size = image.GetSize()
+    input_spacing = image.GetSpacing()
+    output_spacing = [
+        input_size[i] * input_spacing[i] / output_size[i] for i in range(3)
+    ]
+    return sitk.Resample(
+        image,
+        size=output_size,
+        outputOrigin=image.GetOrigin(),
+        outputSpacing=output_spacing,
+        outputPixelType=image.GetPixelID(),
+        outputDirection=image.GetDirection(),
+        useNearestNeighborExtrapolator=is_label,
+    )
 
 
 def get_3D_annotation(label: np.ndarray):
@@ -279,7 +297,7 @@ def get_3D_annotation(label: np.ndarray):
     for class_value in range(1, class_number + 1):
         # 选择的类为 1, 其余为 0.
         class_label_array = np.where(label != class_value, 0, 1)
-        for slice in class_label_array:
+        for i, slice in enumerate(class_label_array):
             # 切片中不存在标注
             if 0 == np.max(slice):
                 continue
@@ -291,8 +309,10 @@ def get_3D_annotation(label: np.ndarray):
             )
             # 遍历 xy 平面的标注
             for xy_contour in xy_contours:
-                xy_contour = np.squeeze(xy_contour)
-                assert len(xy_contour) == 4, "数据中存在不规整的标注"
+                xy_contour = np.squeeze(xy_contour, axis=1)
+                assert (
+                    len(xy_contour) == 4
+                ), f"({xy_contour[0,0]}, {xy_contour[0,1]}, {i}) 处存在不规整的标注"
                 x1, y1 = xy_contour[0]
                 x2, y2 = xy_contour[2]
                 # 根据 x1 找到相应 yz 平面的标注
@@ -303,7 +323,9 @@ def get_3D_annotation(label: np.ndarray):
                 )
                 # 遍历 yz 平面的标注
                 for yz_contour in yz_contours:
-                    assert len(yz_contour) == 4, "数据中存在不规整的标注"
+                    assert (
+                        len(yz_contour) == 4
+                    ), f"({x1}, {yz_contour[0,0]}, {yz_contour[0,1]}) 处存在不规整的标注"
                     yz_contour = np.squeeze(yz_contour)
                     y1_, z1 = yz_contour[0]
                     y2_, z2 = yz_contour[2]
