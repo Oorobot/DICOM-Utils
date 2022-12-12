@@ -1,7 +1,6 @@
 import matplotlib as mpl
 import numpy as np
 import SimpleITK as sitk
-import vtk
 
 # noinspection PyUnresolvedReferences
 import vtkmodules.vtkInteractionStyle
@@ -31,154 +30,17 @@ from vtkmodules.vtkRenderingCore import (
 )
 from vtkmodules.vtkRenderingVolume import vtkFixedPointVolumeRayCastMapper
 
-from utils.dicom import ct2image
-from utils.utils import load_json
-
-
-# 设置键盘交互
-class KeyPressStyle(vtk.vtkInteractorStyleTrackballCamera):
-    def __init__(self):
-        super().__init__()
-        self.AddObserver("KeyPressEvent", self.OnKeyPress)
-
-    def OnKeyPress(self, obj, event):
-        print(f"Key {obj.GetInteractor().GetKeySym()} pressed")
-        camera = (
-            obj.GetInteractor()
-            .GetRenderWindow()
-            .GetRenderers()
-            .GetFirstRenderer()
-            .GetActiveCamera()
-        )
-        if obj.GetInteractor().GetKeySym() == "w":
-            direction_of_projection = camera.GetDirectionOfProjection()
-            position = camera.GetPosition()
-            new_position = np.array(position) + 100 * np.array(direction_of_projection)
-            camera.SetPosition(*new_position.tolist())
-        if obj.GetInteractor().GetKeySym() == "s":
-            direction_of_projection = camera.GetDirectionOfProjection()
-            position = camera.GetPosition()
-            new_position = np.array(position) - 100 * np.array(direction_of_projection)
-            camera.SetPosition(*new_position.tolist())
-
-
-def flip_3D_annotation(image_size, point1, point2, axis):
-    """
-    image_size = (D, H, W): 三维物体的大小
-    point1 = (z1, y1, x1): 三维标注中对角的第一个点
-    point2 = (z2, y2, x2): 三维标注中对角的第二个点(x2>x1, y2>y1, z2>z1)
-    axes: 沿哪个轴进行翻转
-    """
-    assert axis == 0 or axis == 1 or axis == 2
-    point1[axis] = image_size[axis] - point1[axis]
-    point2[axis] = image_size[axis] - point2[axis]
-    return point1, point2
-
-
-# 进行翻转和旋转测试
-def rot90_3D_annotation(image_size, point1, point2, k, axes):
-    """
-    image_size = (D, H, W): 三维物体的大小
-    point1 = (z1, y1, x1): 三维标注中对角的第一个点
-    point2 = (z2, y2, x2): 三维标注中对角的第二个点(x2>x1, y2>y1, z2>z1)
-    k: 旋转90度的次数
-    axes: 按照哪个平面进行旋转, 在x-y平面, axes = (1, 2) 或者 axes = (2, 1)
-    """
-    k = k % 4
-    y1, x1 = point1[axes[0]], point1[axes[1]]
-    y2, x2 = point2[axes[0]], point2[axes[1]]
-    H, W = image_size[axes[0]], image_size[axes[1]]
-    if k == 0:
-        return point1, point2
-    elif k == 1:
-        x1_, y1_ = y1, W - x2
-        x2_, y2_ = y2, W - x1
-    elif k == 2:
-        x1_, y1_ = W - x2, H - y2
-        x2_, y2_ = W - x1, H - y1
-    elif k == 3:
-        x1_, y1_ = H - y2, x1
-        x2_, y2_ = H - y1, x2
-    point1[axes[0]], point1[axes[1]] = y1_, x1_
-    point2[axes[0]], point2[axes[1]] = y2_, x2_
-    return point1, point2
-
-
-def flip(image_array: np.ndarray, boxes: list, axis=None):
-    if axis is None:
-        axis = np.random.randint(0, 4)
-        print("axis: ", axis)
-    axis = axis % 3
-    array = np.flip(image_array, axis)
-    b = []
-    for box in boxes:
-        point1 = list(reversed(box[0:3]))
-        point2 = list(reversed(box[3:6]))
-        point1, point2 = flip_3D_annotation(image_array.shape, point1, point2, axis)
-        b.append(list(reversed(point1)) + list(reversed(point2)))
-    return array, b
-
-
-def rot90(image_array: np.ndarray, boxes: list, k=None, axes=None):
-    if k is None:
-        k = np.random.randint(1, 4)
-        print("k: ", k)
-    if axes is None:
-        choosed_axes = [(0, 1), (0, 2), (1, 2)]
-        axes = choosed_axes[np.random.randint(0, 3)]
-        print("axes: ", axes)
-    k = k % 4
-    array = np.rot90(image_array, k, axes)
-    b = []
-    for box in boxes:
-        point1 = list(reversed(box[0:3]))
-        point2 = list(reversed(box[3:6]))
-        point1, point2 = rot90_3D_annotation(image_array.shape, point1, point2, k, axes)
-        b.append(list(reversed(point1)) + list(reversed(point2)))
-    return array, b
-
-
-def index_to_physical_position(boxes, origin, spacing):
-    physical_positions = []
-    origin = np.array(origin)
-    spacing = np.array(spacing)
-    for box in boxes:
-        point1, point2 = np.array(box[0:3]), np.array(box[3:6])
-        x1, y1, z1 = origin + point1 * spacing
-        x2, y2, z2 = origin + point2 * spacing
-        physical_positions.append(
-            [
-                [x1, y1, z1],
-                [x1, y2, z1],
-                [x2, y2, z1],
-                [x2, y1, z1],
-                [x1, y1, z2],
-                [x1, y2, z2],
-                [x2, y2, z2],
-                [x2, y1, z2],
-            ]
-        )
-    return physical_positions
+from utils.dicom import HU2image, SUVbw2image
+from utils.utils import rot90
+from utils.visualization import KeyPressStyle, index_to_physical_position
 
 
 # 读取 CT 或者 SUVbw 文件
-# ct_path = "Files/resampled_FRI/001_rCT.nii.gz"
-# suv_path = "Files/resampled_FRI/001_rSUVbw.nii.gz"
 ct_path = "001.nii.gz"
 suv_path = "001_.nii.gz"
 ct_image = sitk.ReadImage(ct_path)
 suv_image = sitk.ReadImage(suv_path)
-print(
-    f"CT size: {ct_image.GetSize()}, origin: {ct_image.GetOrigin()}, spacing: {ct_image.GetSpacing()}."
-)
-print(
-    f"SUV size: {suv_image.GetSize()}, origin: {suv_image.GetOrigin()}, spacing: {suv_image.GetSpacing()}."
-)
 spacing = ct_image.GetSpacing()
-# 读取标注文件
-# annotations_path = "./Files/annotations.json"
-# annotations = load_json(annotations_path)
-# annotation = annotations["001"]["annotations"]
 
 # 定位框的颜色
 annotation_colors = {"fraction": "Red", "bladder": "Blue", "Other": "Green"}
@@ -191,14 +53,12 @@ origin = (0.0, 0.0, 0.0)
 
 # 图像预处理
 ct_array = sitk.GetArrayFromImage(ct_image)
+ct_array = HU2image(ct_array, 300.0, 1500.0) * 1500.0
+
 suv_array = sitk.GetArrayFromImage(suv_image)
-ct_array = ct2image(ct_array, 300.0, 1500.0) * 1500.0
 suv_array[suv_array < 0] = 0
+suv_array = SUVbw2image(suv_array, 10.0, True)
 
-
-# 获取定位框的坐标和颜色
-# boxes = [a["location"] for a in annotation]
-# box_colors = [annotation_colors[a["class"]] for a in annotation]
 
 boxes = [[41, 80, 72, 78, 102, 96], [82, 70, 113, 111, 97, 117]]
 box_colors = ["Red", "Blue"]

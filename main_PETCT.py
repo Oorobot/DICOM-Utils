@@ -9,7 +9,12 @@ import numpy as np
 import pandas as pd
 import SimpleITK as sitk
 
-from utils.dicom import ct2image, get_SUVbw_in_GE, read_serises_image, resample
+from utils.dicom import (
+    ct2image,
+    get_SUV_in_GE,
+    read_serises_image,
+    resample_based_target_image,
+)
 from utils.utils import OUTPUT_FOLDER, load_json, mkdirs, save_json
 
 
@@ -99,14 +104,12 @@ def get_resampled_SUVbw_from_PETCT(
     # 计算每张PET slice的SUVbw
     SUVbw = np.zeros_like(PET_array, dtype=np.float32)
     for i in range(PET_array.shape[0]):
-        SUVbw[i] = get_SUVbw_in_GE(PET_array[i], PET_files[i])
+        SUVbw[i] = get_SUV_in_GE(PET_array[i], PET_files[i])[0]
 
     # 将suvbw变为图像, 并根据CT进行重采样.
     SUVbw_image = sitk.GetImageFromArray(SUVbw)
-    SUVbw_image.SetOrigin(PET_image.GetOrigin())
-    SUVbw_image.SetSpacing(PET_image.GetSpacing())
-    SUVbw_image.SetDirection(PET_image.GetDirection())
-    resampled_SUVbw_image = resample(SUVbw_image, CT_image)
+    SUVbw_image.CopyInformation(PET_image)
+    resampled_SUVbw_image = resample_based_target_image(SUVbw_image, CT_image)
 
     return sitk.GetArrayFromImage(resampled_SUVbw_image)
 

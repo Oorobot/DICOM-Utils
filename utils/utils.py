@@ -1,19 +1,31 @@
 import json
 import os
 import stat
+from datetime import datetime
 from typing import List
 
 import matplotlib.pyplot as plt
 import numpy as np
 from xpinyin import Pinyin
 
-# 字符串去除前后空格 str.strip()
-# 常量
-OUTPUT_FOLDER = "./Files"
+# -----------------------------------------------------------#
+#                            常量
+# -----------------------------------------------------------#
 P = Pinyin()
+OUTPUT_FOLDER = "./Files"
 COLORS = ["#63b2ee", "#76da91", "#f8cb7f"]
 
-# 工具
+
+# -----------------------------------------------------------#
+#                        汉字 --> 拼音
+# -----------------------------------------------------------#
+def to_pinyin(chinese_characters: str):
+    return P.get_pinyin(chinese_characters.strip(), " ", convert="upper")
+
+
+# -----------------------------------------------------------#
+#                          文件处理
+# -----------------------------------------------------------#
 def mkdir(dir):
     if not os.path.exists(dir):
         os.mkdir(dir)
@@ -47,7 +59,9 @@ def is_empty(dir: str):
     return not os.listdir(str)
 
 
-# json
+# -----------------------------------------------------------#
+#                            Json
+# -----------------------------------------------------------#
 def save_json(save_path: str, data: dict):
     assert save_path.split(".")[-1] == "json"
     with open(save_path, "w") as file:
@@ -61,12 +75,9 @@ def load_json(file_path: str):
     return data
 
 
-# 汉字转拼音
-def to_pinyin(chinese_characters: str):
-    return P.get_pinyin(chinese_characters.strip(), " ", convert="upper")
-
-
-# 画直方图
+# -----------------------------------------------------------#
+#                           直方图
+# -----------------------------------------------------------#
 def plot_mutilhist(
     a: List[list],
     bins: List[list],
@@ -94,3 +105,100 @@ def plot_mutilhist(
     ax.set_ylabel(ylabel)
     ax.set_xlabel(xlabel)
     plt.show()
+
+
+# -----------------------------------------------------------#
+#                     字符串 --> datatime
+# -----------------------------------------------------------#
+def str2datetime(time: str) -> datetime:
+    """转换字符串(format: %Y%m%d%H%M%S or %Y%m%d%H%M%S.%f)为 datetime 类型数据"""
+    date_time = None
+    try:
+        date_time = datetime.strptime(time, "%Y%m%d%H%M%S")
+    except:
+        print("无法转换为'%Y%m%d%H%M%S'形式。")
+    try:
+        date_time = datetime.strptime(time, "%Y%m%d%H%M%S.%f")
+    except:
+        print("无法转换为'%Y%m%d%H%M%S.%f'形式。")
+    return date_time
+
+
+# -----------------------------------------------------------#
+#              三维体素图像与定位框的旋转和翻转
+# -----------------------------------------------------------#
+def flip_3D_bounding_box(image_size, point1, point2, axis):
+    """
+    image_size = (D, H, W): 三维物体的大小
+    point1 = (z1, y1, x1): 三维标注中对角的第一个点
+    point2 = (z2, y2, x2): 三维标注中对角的第二个点(x2>x1, y2>y1, z2>z1)
+    axes: 沿哪个轴进行翻转
+    """
+    assert axis == 0 or axis == 1 or axis == 2
+    point1[axis] = image_size[axis] - point1[axis]
+    point2[axis] = image_size[axis] - point2[axis]
+    return point1, point2
+
+
+def rot90_3D_bounding_box(image_size, point1, point2, k, axes):
+    """
+    image_size = (D, H, W): 三维物体的大小
+    point1 = (z1, y1, x1): 三维标注中对角的第一个点
+    point2 = (z2, y2, x2): 三维标注中对角的第二个点(x2>x1, y2>y1, z2>z1)
+    k: 旋转90度的次数
+    axes: 按照哪个平面进行旋转, 在x-y平面, axes = (1, 2) 或者 axes = (2, 1)
+    """
+    k = k % 4
+    y1, x1 = point1[axes[0]], point1[axes[1]]
+    y2, x2 = point2[axes[0]], point2[axes[1]]
+    H, W = image_size[axes[0]], image_size[axes[1]]
+    if k == 0:
+        return point1, point2
+    elif k == 1:
+        x1_, y1_ = y1, W - x2
+        x2_, y2_ = y2, W - x1
+    elif k == 2:
+        x1_, y1_ = W - x2, H - y2
+        x2_, y2_ = W - x1, H - y1
+    elif k == 3:
+        x1_, y1_ = H - y2, x1
+        x2_, y2_ = H - y1, x2
+    point1[axes[0]], point1[axes[1]] = y1_, x1_
+    point2[axes[0]], point2[axes[1]] = y2_, x2_
+    return point1, point2
+
+
+def flip(image_array: np.ndarray, boxes: list, axis=None):
+    if axis is None:
+        axis = np.random.randint(0, 4)
+        print("axis: ", axis)
+    axis = axis % 3
+    array = np.flip(image_array, axis)
+    b = []
+    for box in boxes:
+        point1 = list(reversed(box[0:3]))
+        point2 = list(reversed(box[3:6]))
+        point1, point2 = flip_3D_bounding_box(image_array.shape, point1, point2, axis)
+        b.append(list(reversed(point1)) + list(reversed(point2)))
+    return array, b
+
+
+def rot90(image_array: np.ndarray, boxes: list, k=None, axes=None):
+    if k is None:
+        k = np.random.randint(1, 4)
+        print("k: ", k)
+    if axes is None:
+        choosed_axes = [(0, 1), (0, 2), (1, 2)]
+        axes = choosed_axes[np.random.randint(0, 3)]
+        print("axes: ", axes)
+    k = k % 4
+    array = np.rot90(image_array, k, axes)
+    b = []
+    for box in boxes:
+        point1 = list(reversed(box[0:3]))
+        point2 = list(reversed(box[3:6]))
+        point1, point2 = rot90_3D_bounding_box(
+            image_array.shape, point1, point2, k, axes
+        )
+        b.append(list(reversed(point1)) + list(reversed(point2)))
+    return array, b
