@@ -3,7 +3,8 @@ import SimpleITK as sitk
 import vtk
 from matplotlib.cm import get_cmap
 from vtkmodules.util.vtkImageImportFromArray import vtkImageImportFromArray
-from vtkmodules.vtkCommonCore import vtkPoints, vtkFloatArray, vtkLookupTable
+from vtkmodules.vtkCommonColor import vtkNamedColors
+from vtkmodules.vtkCommonCore import vtkFloatArray, vtkLookupTable, vtkPoints
 from vtkmodules.vtkCommonDataModel import (
     vtkCellArray,
     vtkPiecewiseFunction,
@@ -11,15 +12,19 @@ from vtkmodules.vtkCommonDataModel import (
 )
 from vtkmodules.vtkRenderingCore import (
     vtkActor,
-    vtkPolyDataMapper,
+    vtkFollower,
     vtkColorTransferFunction,
+    vtkPolyDataMapper,
     vtkVolume,
     vtkVolumeProperty,
 )
 from vtkmodules.vtkRenderingVolume import vtkFixedPointVolumeRayCastMapper
+from vtkmodules.vtkRenderingFreeType import vtkVectorText
 
 from utils.dicom import HU2image, SUVbw2image
 
+Colors = ["Red", "Green", "Blue", "Yellow"]
+Texts = ["Infected Lesion", "Uninfected Lesion", "Bladder", "Other"]
 
 # -----------------------------------------------------------#
 #                       自定义键盘交互
@@ -42,38 +47,103 @@ class KeyPressStyle(vtk.vtkInteractorStyleTrackballCamera):
             direction_of_projection = camera.GetDirectionOfProjection()
             position = camera.GetPosition()
             new_position = np.array(position) + 100 * np.array(direction_of_projection)
+            new_focal_point = new_position + 400 * np.array(direction_of_projection)
             camera.SetPosition(*new_position.tolist())
+            camera.SetFocalPoint(*new_focal_point.tolist())
         if obj.GetInteractor().GetKeySym() == "s":
             direction_of_projection = camera.GetDirectionOfProjection()
             position = camera.GetPosition()
             new_position = np.array(position) - 100 * np.array(direction_of_projection)
+            new_focal_point = new_position + 400 * np.array(direction_of_projection)
             camera.SetPosition(*new_position.tolist())
+            camera.SetFocalPoint(*new_focal_point.tolist())
 
 
 # -----------------------------------------------------------#
-#                   索引号 -. 实际坐标位置
+#                     标注框以及文字
 # -----------------------------------------------------------#
-def index_to_physical_position(boxes, origin, spacing):
-    physical_positions = []
+def vtk_bounding_boxes(boxes, origin, spacing):
+    vtk_colors = vtkNamedColors()
     origin = np.array(origin)
     spacing = np.array(spacing)
+    actors = []
     for box in boxes:
+        # 将索引号转换为坐标位置
         point1, point2 = np.array(box[0:3]), np.array(box[3:6])
         x1, y1, z1 = origin + point1 * spacing
         x2, y2, z2 = origin + point2 * spacing
-        physical_positions.append(
-            [
-                [x1, y1, z1],
-                [x1, y2, z1],
-                [x2, y2, z1],
-                [x2, y1, z1],
-                [x1, y1, z2],
-                [x1, y2, z2],
-                [x2, y2, z2],
-                [x2, y1, z2],
-            ]
-        )
-    return physical_positions
+        position = [
+            [x1, y1, z1],
+            [x1, y2, z1],
+            [x2, y2, z1],
+            [x2, y1, z1],
+            [x1, y1, z2],
+            [x1, y2, z2],
+            [x2, y2, z2],
+            [x2, y1, z2],
+        ]
+
+        color = Colors[box[6]]
+        text = Texts[box[6]]
+        text_position = [x2, y2, z2]
+
+        # 边界框
+        points = vtkPoints()  # 点
+        points.SetNumberOfPoints(8)
+        for i in range(8):
+            points.SetPoint(i, *position[i])
+        lines = vtkCellArray()  # 线
+        lines.InsertNextCell(5)
+        lines.InsertCellPoint(0)
+        lines.InsertCellPoint(1)
+        lines.InsertCellPoint(2)
+        lines.InsertCellPoint(3)
+        lines.InsertCellPoint(0)
+        lines.InsertNextCell(5)
+        lines.InsertCellPoint(4)
+        lines.InsertCellPoint(5)
+        lines.InsertCellPoint(6)
+        lines.InsertCellPoint(7)
+        lines.InsertCellPoint(4)
+        lines.InsertNextCell(2)
+        lines.InsertCellPoint(0)
+        lines.InsertCellPoint(4)
+        lines.InsertNextCell(2)
+        lines.InsertCellPoint(1)
+        lines.InsertCellPoint(5)
+        lines.InsertNextCell(2)
+        lines.InsertCellPoint(2)
+        lines.InsertCellPoint(6)
+        lines.InsertNextCell(2)
+        lines.InsertCellPoint(3)
+        lines.InsertCellPoint(7)
+
+        cube = vtkPolyData()  # 多边形
+        cube.SetPoints(points)
+        cube.SetLines(lines)
+
+        cubeMapper = vtkPolyDataMapper()
+        cubeMapper.SetInputData(cube)
+        cubeMapper.Update()
+
+        bbActor = vtkActor()
+        bbActor.SetMapper(cubeMapper)
+        bbActor.GetProperty().SetColor(vtk_colors.GetColor3d(color))
+        actors.append(bbActor)
+
+        # 文本框
+        vtk_text = vtkVectorText()
+        vtk_text.SetText(text)
+        textMapper = vtkPolyDataMapper()
+        textMapper.SetInputConnection(vtk_text.GetOutputPort())
+        textActor = vtkFollower()
+        textActor.SetMapper(textMapper)
+        textActor.SetScale(10, 10, 10)
+        textActor.AddPosition(*text_position)
+        textActor.GetProperty().SetColor(vtk_colors.GetColor3d(color))
+
+        actors.append(textActor)
+    return actors
 
 
 # -----------------------------------------------------------#
@@ -99,7 +169,7 @@ def ct_vtk_volume(ct_array: np.ndarray, origin: list, spacing: list):
 
     # 使用颜色转换函数，对不同的值设置不同的函数
     volume_color = vtkColorTransferFunction()
-    cmap = get_cmap("bone")
+    cmap = get_cmap("gray")
     colors = cmap(np.linspace(0, 1, cmap.N))
     rgb_point = np.linspace(-450, 1050, 256)
     for i in range(0, 256):
@@ -108,8 +178,8 @@ def ct_vtk_volume(ct_array: np.ndarray, origin: list, spacing: list):
     # 使用透明度转换函数，用于控制不同组织之间的透明度
     volume_scalar_opacity = vtkPiecewiseFunction()
     volume_scalar_opacity.AddPoint(0, 0.00)
-    volume_scalar_opacity.AddPoint(500, 0.20)
-    volume_scalar_opacity.AddPoint(1000, 0.50)
+    volume_scalar_opacity.AddPoint(500, 0.15)
+    volume_scalar_opacity.AddPoint(1000, 0.15)
     volume_scalar_opacity.AddPoint(1150, 0.85)
 
     # 梯度不透明度函数用于降低体积“平坦”区域的不透明度，同时保持组织类型之间边界的不透明度。梯度是以强度在单位距离上的变化量来测量的
@@ -135,6 +205,9 @@ def ct_vtk_volume(ct_array: np.ndarray, origin: list, spacing: list):
     return volume
 
 
+# -----------------------------------------------------------#
+#                      vtk volume
+# -----------------------------------------------------------#
 def suv_vtk_volume(suv_array: np.ndarray, origin: list, spacing: list):
     array = SUVbw2image(suv_array, 2.5)
     suv = sitk.GetArrayFromImage(sitk.GetImageFromArray(array))
@@ -189,6 +262,9 @@ def suv_vtk_volume(suv_array: np.ndarray, origin: list, spacing: list):
     return volume
 
 
+# -----------------------------------------------------------#
+#                     vtk point cloud
+# -----------------------------------------------------------#
 def suv_point_cloud(suv_array: np.ndarray, origin: list, spacing: list):
     shape = suv_array.shape
     suv_image = SUVbw2image(suv_array, 2.5, True)
@@ -217,7 +293,8 @@ def suv_point_cloud(suv_array: np.ndarray, origin: list, spacing: list):
                 cells.InsertCellPoint(i)
                 lookup.SetTableValue(
                     i,
-                    *hot_colors[suv_image[d, h, w]],
+                    *hot_colors[suv_image[d, h, w]][0:3],
+                    suv_image[d, h, w] / 255,
                 )
                 i = i + 1
     lookup.Build()
