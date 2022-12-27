@@ -1,6 +1,17 @@
+import os
+
 import numpy as np
 import SimpleITK as sitk
 import vtk
+
+# noinspection PyUnresolvedReferences
+import vtkmodules.vtkInteractionStyle
+
+# noinspection PyUnresolvedReferences
+import vtkmodules.vtkRenderingOpenGL2
+
+# noinspection PyUnresolvedReferences
+import vtkmodules.vtkRenderingVolumeOpenGL2
 from matplotlib.cm import get_cmap
 from vtkmodules.util.vtkImageImportFromArray import vtkImageImportFromArray
 from vtkmodules.vtkCommonColor import vtkNamedColors
@@ -12,19 +23,20 @@ from vtkmodules.vtkCommonDataModel import (
 )
 from vtkmodules.vtkRenderingCore import (
     vtkActor,
-    vtkFollower,
     vtkColorTransferFunction,
+    vtkFollower,
     vtkPolyDataMapper,
+    vtkRenderer,
+    vtkRenderWindow,
+    vtkRenderWindowInteractor,
     vtkVolume,
     vtkVolumeProperty,
 )
-from vtkmodules.vtkRenderingVolume import vtkFixedPointVolumeRayCastMapper
 from vtkmodules.vtkRenderingFreeType import vtkVectorText
+from vtkmodules.vtkRenderingVolume import vtkFixedPointVolumeRayCastMapper
 
-from utils.dicom import HU2image, SUVbw2image
-
-Colors = ["Red", "Green", "Blue", "Yellow"]
-Texts = ["Infected Lesion", "Uninfected Lesion", "Bladder", "Other"]
+from .dicom import HU2image, SUVbw2image
+from .utils import load_json
 
 # -----------------------------------------------------------#
 #                       自定义键盘交互
@@ -62,12 +74,11 @@ class KeyPressStyle(vtk.vtkInteractorStyleTrackballCamera):
 # -----------------------------------------------------------#
 #                     标注框以及文字
 # -----------------------------------------------------------#
-def vtk_bounding_boxes(boxes, origin, spacing):
-    vtk_colors = vtkNamedColors()
+def vtk_bounding_boxes(boxes, origin, spacing, texts, colors):
     origin = np.array(origin)
     spacing = np.array(spacing)
     actors = []
-    for box in boxes:
+    for box, text, color in zip(boxes, texts, colors):
         # 将索引号转换为坐标位置
         point1, point2 = np.array(box[0:3]), np.array(box[3:6])
         x1, y1, z1 = origin + point1 * spacing
@@ -82,10 +93,6 @@ def vtk_bounding_boxes(boxes, origin, spacing):
             [x2, y2, z2],
             [x2, y1, z2],
         ]
-
-        color = Colors[box[6]]
-        text = Texts[box[6]]
-        text_position = [x2, y2, z2]
 
         # 边界框
         points = vtkPoints()  # 点
@@ -128,7 +135,7 @@ def vtk_bounding_boxes(boxes, origin, spacing):
 
         bbActor = vtkActor()
         bbActor.SetMapper(cubeMapper)
-        bbActor.GetProperty().SetColor(vtk_colors.GetColor3d(color))
+        bbActor.GetProperty().SetColor(*color)
         actors.append(bbActor)
 
         # 文本框
@@ -139,8 +146,8 @@ def vtk_bounding_boxes(boxes, origin, spacing):
         textActor = vtkFollower()
         textActor.SetMapper(textMapper)
         textActor.SetScale(10, 10, 10)
-        textActor.AddPosition(*text_position)
-        textActor.GetProperty().SetColor(vtk_colors.GetColor3d(color))
+        textActor.AddPosition(x2, y2, z2)
+        textActor.GetProperty().SetColor(*color)
 
         actors.append(textActor)
     return actors
@@ -315,3 +322,87 @@ def suv_point_cloud(suv_array: np.ndarray, origin: list, spacing: list):
     polygonActor.GetProperty().SetOpacity(0.4)
 
     return polygonActor
+
+
+if __name__ == "__main__":
+    image_id = "001"
+    label_json = "Files/image_2mm.json"
+    detection_txt = ""
+    input_shape = [384, 96, 160]
+
+    TEXTS = ["infected_lesion", "uninfected_lesion", "bladder"]
+    GT_COLOR = [(16, 161, 157), (84, 3, 117), (255, 112, 0), (255, 191, 0)]
+    DT_COLOR = [(28, 49, 94), (34, 124, 112), (136, 164, 124), (230, 226, 195)]
+
+    # 读取文件
+    ct_image = sitk.ReadImage(os.path.join("Files", "2mm", f"{image_id}_CT.nii.gz"))
+    suv_image = sitk.ReadImage(os.path.join("Files", "2mm", f"{image_id}_SUVbw.nii.gz"))
+    ct_array = sitk.GetArrayFromImage(ct_image)
+    suv_array = sitk.GetArrayFromImage(suv_image)
+
+    origin = [0.0, 0.0, 0.0]
+    spacing = ct_image.GetSpacing()
+
+    gt_boxes = []
+    gt_texts = []
+    gt_colors = []
+    labels = load_json(label_json)[image_id]["labels"]
+    for label in labels:
+        text, box = label["category"], label["position"]
+        print(TEXTS.index(text))
+        if text not in TEXTS:
+            continue
+        color = (np.array(GT_COLOR[TEXTS.index(text)]) / 255.0).tolist()
+        gt_boxes.append(box)
+        gt_texts.append(text)
+        gt_colors.append(color)
+    # lines = open(detection_txt, "r").readlines()
+    # dt_boxes = []
+    # for line in lines:
+    #     c, x1, y1, z1, x2, y2, z2 = line.strip().split()
+    #     c_index = classes.index(c)
+    #     c_color = np.array(dt_colors[c_index]) / 255.0
+    #     dt_boxes.append([x1, y1, z1, x2, y2, z2, c_color.tolist()])
+
+    # 创建需要渲染的物体
+    ct_volume = ct_vtk_volume(ct_array, origin, spacing)
+    suv_pc = suv_point_cloud(suv_array, origin, spacing)
+    gt_actors = vtk_bounding_boxes(gt_boxes, origin, spacing, gt_texts, gt_colors)
+
+    # 创建渲染器，渲染窗口和交互工具. 渲染器画入在渲染窗口里，交互工具可以开启基于鼠标和键盘的与场景的交互能力
+    renderer = vtkRenderer()
+    renderWindow = vtkRenderWindow()
+    renderWindow.AddRenderer(renderer)
+    interactor = vtkRenderWindowInteractor()
+    interactor.SetRenderWindow(renderWindow)
+    interactor.SetInteractorStyle(KeyPressStyle())
+
+    renderer.AddViewProp(ct_volume)
+    renderer.AddActor(suv_pc)
+    for actor in gt_actors:
+        renderer.AddActor(actor)
+
+    # 设置摄像机
+    camera = renderer.GetActiveCamera()
+    c = ct_volume.GetCenter()
+    camera.SetViewUp(0, 0, -1)
+    camera.SetPosition(c[0], c[1] - 400, c[2])
+    camera.SetFocalPoint(c[0], c[1], c[2])
+    camera.Azimuth(30.0)
+    camera.Elevation(30.0)
+
+    # 设置背景颜色
+    renderer.SetBackground(vtkNamedColors().GetColor3d("Grey"))
+
+    renderer.ResetCameraClippingRange()
+    for i in range(1, len(gt_actors), 2):
+        gt_actors[i].SetCamera(renderer.GetActiveCamera())
+
+    interactor.Initialize()
+
+    renderWindow.SetSize(680, 480)
+    renderWindow.SetWindowName("PETCT Visualization")
+    renderWindow.Render()
+
+    # 开启交互
+    interactor.Start()

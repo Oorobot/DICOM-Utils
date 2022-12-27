@@ -224,10 +224,12 @@ def SUVbw2image(pixel_value: np.ndarray, SUVbw_max: float, to_uint8: bool = Fals
 def resample_based_target_image(
     image: sitk.Image, target_image: sitk.Image, is_label: bool = False
 ) -> sitk.Image:
-    outputPixelType = sitk.sitkInt64 if is_label else sitk.sitkFloat32
+    outputPixelType = sitk.sitkInt32 if is_label else sitk.sitkFloat32
+    interpolator = sitk.sitkNearestNeighbor if is_label else sitk.sitkLinear
     return sitk.Resample(
         image,
         target_image,
+        interpolator=interpolator,
         outputPixelType=outputPixelType,
         useNearestNeighborExtrapolator=is_label,
     )
@@ -248,14 +250,15 @@ def resample_based_spacing(
         math.ceil(input_size[i] * input_spacing[i] / output_spacing[i])
         for i in range(3)
     ]
+    interpolator = sitk.sitkNearestNeighbor if is_label else sitk.sitkLinear
     return sitk.Resample(
         image,
         size=output_size,
+        interpolator=interpolator,
         outputOrigin=image.GetOrigin(),
         outputSpacing=output_spacing,
         outputPixelType=image.GetPixelID(),
         outputDirection=image.GetDirection(),
-        useNearestNeighborExtrapolator=is_label,
     )
 
 
@@ -266,19 +269,21 @@ def resameple_based_size(image: sitk.Image, output_size: list, is_label: bool = 
     output_size: 指定的 size
     return: 重采样后的数据
     """
+    # 读取文件的size
     input_size = image.GetSize()
     input_spacing = image.GetSpacing()
     output_spacing = [
         input_size[i] * input_spacing[i] / output_size[i] for i in range(3)
     ]
+    interpolator = sitk.sitkNearestNeighbor if is_label else sitk.sitkLinear
     return sitk.Resample(
         image,
         size=output_size,
+        interpolator=interpolator,
         outputOrigin=image.GetOrigin(),
         outputSpacing=output_spacing,
         outputPixelType=image.GetPixelID(),
         outputDirection=image.GetDirection(),
-        useNearestNeighborExtrapolator=is_label,
     )
 
 
