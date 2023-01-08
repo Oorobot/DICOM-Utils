@@ -35,8 +35,8 @@ from vtkmodules.vtkRenderingCore import (
 from vtkmodules.vtkRenderingFreeType import vtkVectorText
 from vtkmodules.vtkRenderingVolume import vtkFixedPointVolumeRayCastMapper
 
-from .dicom import HU2image, SUVbw2image
-from .utils import load_json
+from utils.dicom import SUVbw2image
+from utils.utils import load_json
 
 # -----------------------------------------------------------#
 #                       自定义键盘交互
@@ -299,9 +299,7 @@ def suv_point_cloud(suv_array: np.ndarray, origin: list, spacing: list):
                 cells.InsertNextCell(1)
                 cells.InsertCellPoint(i)
                 lookup.SetTableValue(
-                    i,
-                    *hot_colors[suv_image[d, h, w]][0:3],
-                    suv_image[d, h, w] / 255,
+                    i, *hot_colors[suv_image[d, h, w]][0:3], suv_image[d, h, w] / 255,
                 )
                 i = i + 1
     lookup.Build()
@@ -325,14 +323,16 @@ def suv_point_cloud(suv_array: np.ndarray, origin: list, spacing: list):
 
 
 if __name__ == "__main__":
-    image_id = "001"
+    image_id = "447"
     label_json = "Files/image_2mm.json"
-    detection_txt = ""
+    detection_txt = "Files/yolov3/ep600_ap25/detection-results/447.txt"
     input_shape = [384, 96, 160]
 
     TEXTS = ["infected_lesion", "uninfected_lesion", "bladder"]
-    GT_COLOR = [(16, 161, 157), (84, 3, 117), (255, 112, 0), (255, 191, 0)]
-    DT_COLOR = [(28, 49, 94), (34, 124, 112), (136, 164, 124), (230, 226, 195)]
+    # GT_COLOR = [(16, 161, 157), (84, 3, 117), (255, 112, 0), (255, 191, 0)]
+    # DT_COLOR = [(28, 49, 94), (34, 124, 112), (136, 164, 124), (230, 226, 195)]
+    GT_COLOR = [(255, 0, 0), (255, 82, 50), (221, 80, 53), (255, 158, 129)]
+    DT_COLOR = [(0, 128, 0), (70, 149, 54), (110, 170, 94), (147, 191, 133)]
 
     # 读取文件
     ct_image = sitk.ReadImage(os.path.join("Files", "2mm", f"{image_id}_CT.nii.gz"))
@@ -349,25 +349,28 @@ if __name__ == "__main__":
     labels = load_json(label_json)[image_id]["labels"]
     for label in labels:
         text, box = label["category"], label["position"]
-        print(TEXTS.index(text))
         if text not in TEXTS:
             continue
         color = (np.array(GT_COLOR[TEXTS.index(text)]) / 255.0).tolist()
         gt_boxes.append(box)
         gt_texts.append(text)
         gt_colors.append(color)
-    # lines = open(detection_txt, "r").readlines()
-    # dt_boxes = []
-    # for line in lines:
-    #     c, x1, y1, z1, x2, y2, z2 = line.strip().split()
-    #     c_index = classes.index(c)
-    #     c_color = np.array(dt_colors[c_index]) / 255.0
-    #     dt_boxes.append([x1, y1, z1, x2, y2, z2, c_color.tolist()])
+    lines = open(detection_txt, "r").readlines()
+    dt_boxes = []
+    dt_texts = []
+    dt_colors = []
+    for line in lines:
+        text, c, *box = line.strip().split()
+        color = np.array(DT_COLOR[TEXTS.index(text)]) / 255.0
+        dt_texts.append(text)
+        dt_colors.append(color)
+        dt_boxes.append([int(b) for b in box])
 
     # 创建需要渲染的物体
     ct_volume = ct_vtk_volume(ct_array, origin, spacing)
     suv_pc = suv_point_cloud(suv_array, origin, spacing)
     gt_actors = vtk_bounding_boxes(gt_boxes, origin, spacing, gt_texts, gt_colors)
+    dt_actors = vtk_bounding_boxes(dt_boxes, origin, spacing, dt_texts, dt_colors)
 
     # 创建渲染器，渲染窗口和交互工具. 渲染器画入在渲染窗口里，交互工具可以开启基于鼠标和键盘的与场景的交互能力
     renderer = vtkRenderer()
@@ -380,6 +383,8 @@ if __name__ == "__main__":
     renderer.AddViewProp(ct_volume)
     renderer.AddActor(suv_pc)
     for actor in gt_actors:
+        renderer.AddActor(actor)
+    for actor in dt_actors:
         renderer.AddActor(actor)
 
     # 设置摄像机
@@ -397,11 +402,13 @@ if __name__ == "__main__":
     renderer.ResetCameraClippingRange()
     for i in range(1, len(gt_actors), 2):
         gt_actors[i].SetCamera(renderer.GetActiveCamera())
+    for i in range(1, len(dt_actors), 2):
+        dt_actors[i].SetCamera(renderer.GetActiveCamera())
 
     interactor.Initialize()
 
     renderWindow.SetSize(680, 480)
-    renderWindow.SetWindowName("PETCT Visualization")
+    renderWindow.SetWindowName(f"PETCT Visualization - {image_id}")
     renderWindow.Render()
 
     # 开启交互
