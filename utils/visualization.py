@@ -35,8 +35,8 @@ from vtkmodules.vtkRenderingCore import (
 from vtkmodules.vtkRenderingFreeType import vtkVectorText
 from vtkmodules.vtkRenderingVolume import vtkFixedPointVolumeRayCastMapper
 
-from .dicom import HU2image, SUVbw2image
-from .utils import load_json
+from utils.dicom import SUVbw2image
+from utils.utils import load_json
 
 # -----------------------------------------------------------#
 #                       自定义键盘交互
@@ -331,8 +331,8 @@ if __name__ == "__main__":
     input_shape = [384, 96, 160]
 
     TEXTS = ["infected_lesion", "uninfected_lesion", "bladder"]
-    GT_COLOR = [(16, 161, 157), (84, 3, 117), (255, 112, 0), (255, 191, 0)]
-    DT_COLOR = [(28, 49, 94), (34, 124, 112), (136, 164, 124), (230, 226, 195)]
+    GT_COLOR = [(255, 0, 0), (255, 82, 50), (221, 80, 53), (255, 158, 129)]
+    DT_COLOR = [(0, 128, 0), (70, 149, 54), (110, 170, 94), (147, 191, 133)]
 
     # 读取文件
     ct_image = sitk.ReadImage(os.path.join("Files", "2mm", f"{image_id}_CT.nii.gz"))
@@ -349,7 +349,6 @@ if __name__ == "__main__":
     labels = load_json(label_json)[image_id]["labels"]
     for label in labels:
         text, box = label["category"], label["position"]
-        print(TEXTS.index(text))
         if text not in TEXTS:
             continue
         color = (np.array(GT_COLOR[TEXTS.index(text)]) / 255.0).tolist()
@@ -408,7 +407,7 @@ if __name__ == "__main__":
     interactor.Initialize()
 
     renderWindow.SetSize(680, 480)
-    renderWindow.SetWindowName("PETCT Visualization")
+    renderWindow.SetWindowName(f"PETCT Visualization - {image_id}")
     renderWindow.Render()
 
     # 开启交互
