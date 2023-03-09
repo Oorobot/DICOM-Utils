@@ -325,9 +325,9 @@ def suv_point_cloud(suv_array: np.ndarray, origin: list, spacing: list):
 
 
 if __name__ == "__main__":
-    image_id = "001"
+    image_id = "011"
     label_json = "Files/image_2mm.json"
-    detection_txt = ""
+    detection_txt = "Files/011.txt"
     input_shape = [384, 96, 160]
 
     TEXTS = ["infected_lesion", "uninfected_lesion", "bladder"]
@@ -356,18 +356,23 @@ if __name__ == "__main__":
         gt_boxes.append(box)
         gt_texts.append(text)
         gt_colors.append(color)
-    # lines = open(detection_txt, "r").readlines()
-    # dt_boxes = []
-    # for line in lines:
-    #     c, x1, y1, z1, x2, y2, z2 = line.strip().split()
-    #     c_index = classes.index(c)
-    #     c_color = np.array(dt_colors[c_index]) / 255.0
-    #     dt_boxes.append([x1, y1, z1, x2, y2, z2, c_color.tolist()])
+
+    lines = open(detection_txt, "r").readlines()
+    dt_boxes = []
+    dt_texts = []
+    dt_colors = []
+    for line in lines:
+        c, _, x1, y1, z1, x2, y2, z2 = line.strip().split()
+        color = (np.array(DT_COLOR[TEXTS.index(c)]) / 255.0).tolist()
+        dt_boxes.append([int(_) for _ in [x1, y1, z1, x2, y2, z2]])
+        dt_texts.append(c)
+        dt_colors.append(color)
 
     # 创建需要渲染的物体
     ct_volume = ct_vtk_volume(ct_array, origin, spacing)
     suv_pc = suv_point_cloud(suv_array, origin, spacing)
     gt_actors = vtk_bounding_boxes(gt_boxes, origin, spacing, gt_texts, gt_colors)
+    dt_actors = vtk_bounding_boxes(dt_boxes, origin, spacing, dt_texts, dt_colors)
 
     # 创建渲染器，渲染窗口和交互工具. 渲染器画入在渲染窗口里，交互工具可以开启基于鼠标和键盘的与场景的交互能力
     renderer = vtkRenderer()
@@ -379,7 +384,7 @@ if __name__ == "__main__":
 
     renderer.AddViewProp(ct_volume)
     renderer.AddActor(suv_pc)
-    for actor in gt_actors:
+    for actor in gt_actors + dt_actors:
         renderer.AddActor(actor)
 
     # 设置摄像机
@@ -397,6 +402,8 @@ if __name__ == "__main__":
     renderer.ResetCameraClippingRange()
     for i in range(1, len(gt_actors), 2):
         gt_actors[i].SetCamera(renderer.GetActiveCamera())
+    for i in range(1, len(dt_actors), 2):
+        dt_actors[i].SetCamera(renderer.GetActiveCamera())
 
     interactor.Initialize()
 
