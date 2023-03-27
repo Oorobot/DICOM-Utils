@@ -1,14 +1,22 @@
 import os
+from typing import List
 
 import dominate
 from dominate.tags import *
 
 
 class HTML:
-    def __init__(self, web_dir, title, refresh=0):
+    """
+    创建一个展示图片的网页
+    title: 网页的名称
+    web_dir: 保存网页 index.html 文件的文件夹
+    img_dir: web_dir文件夹下一个存放需要展示图像的文件夹名
+    """
+
+    def __init__(self, title: str, web_dir: str, img_dir: str, refresh: int = 0):
         self.title = title
         self.web_dir = web_dir
-        self.img_dir = os.path.join(self.web_dir, "images")
+        self.img_dir = img_dir
         if not os.path.exists(self.web_dir):
             os.makedirs(self.web_dir)
         if not os.path.exists(self.img_dir):
@@ -22,33 +30,38 @@ class HTML:
     def get_image_dir(self):
         return self.img_dir
 
-    def add_header(self, str):
+    def add_header(self, str: str):
         with self.doc:
             h3(str)
 
-    def add_table(self, border=1):
+    def add_table(self, border: int = 1):
         self.t = table(border=border, style="table-layout: fixed;")
         self.doc.add(self.t)
 
-    def add_images(self, ims, txts, links, width=512):
+    def add_images(self, images: List[str], titles: List[str], width=512):
+        """
+        imgs: 图片的文件名
+        txts: 图像展示的标题
+        """
         self.add_table()
         with self.t:
             with tr():
-                for im, txt, link in zip(ims, txts, links):
+                for image, title in zip(images, titles):
+                    image_relative_path = os.path.join(self.img_dir, image)
                     with td(
                         style="word-wrap: break-word;", halign="center", valign="top"
                     ):
                         with p():
-                            with a(href=os.path.join("images", link)):
+                            with a(href=image_relative_path):
                                 img(
                                     style="width:%dpx" % (width),
-                                    src=os.path.join("images", im),
+                                    src=image_relative_path,
                                 )
                             br()
-                            p(txt)
+                            p(title)
 
     def save(self):
-        html_file = "%s/index.html" % self.web_dir
+        html_file = f"{self.web_dir}/index.html"
         f = open(html_file, "wt")
         f.write(self.doc.render())
         f.close()

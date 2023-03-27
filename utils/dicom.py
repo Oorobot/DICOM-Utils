@@ -224,6 +224,12 @@ def SUVbw2image(pixel_value: np.ndarray, SUVbw_max: float, to_uint8: bool = Fals
 def resample_based_target_image(
     image: sitk.Image, target_image: sitk.Image, is_label: bool = False
 ) -> sitk.Image:
+    """
+    将数据重采样的指定的图像一致
+    image: sitk 读取的 image 数据
+    target_image: 指定的 image
+    return: 重采样后的 image
+    """
     outputPixelType = sitk.sitkInt32 if is_label else sitk.sitkFloat32
     interpolator = sitk.sitkNearestNeighbor if is_label else sitk.sitkLinear
     return sitk.Resample(
@@ -239,10 +245,10 @@ def resample_based_spacing(
     image: sitk.Image, output_spacing: list, is_label: bool = False
 ):
     """
-    将体数据重采样的指定的 spacing 大小
-    image: sitk 读取的 image 信息, 这里是体数据
+    将数据重采样的指定的 spacing 大小
+    image: sitk 读取的 image 据
     output_spacing: 指定的 spacing
-    return: 重采样后的数据
+    return: 重采样后的 image
     """
     input_size = image.GetSize()
     input_spacing = image.GetSpacing()
@@ -264,12 +270,11 @@ def resample_based_spacing(
 
 def resameple_based_size(image: sitk.Image, output_size: list, is_label: bool = False):
     """
-    将体数据重采样的指定的 size
-    image: sitk 读取的 image 信息, 这里是体数据
+    将数据重采样的指定的 size
+    image: sitk 读取的 image 数据
     output_size: 指定的 size
-    return: 重采样后的数据
+    return: 重采样后的 image
     """
-    # 读取文件的size
     input_size = image.GetSize()
     input_spacing = image.GetSpacing()
     output_spacing = [
@@ -291,6 +296,27 @@ def resameple_based_size(image: sitk.Image, output_size: list, is_label: bool = 
 #                   获取三维标注（立方体）
 # -----------------------------------------------------------#
 def get_3D_annotation(label_path: str) -> Tuple[List[int], List[List[int]]]:
+    """ 
+    读取itk-snap软件标注的三维边界框以及类别信息
+    label_path: 标注数据文件(.nii.gz)路径
+    return: 类别 [c1, ...] 和 三维边界框 [(x1, y1, z1, x2, y2, z2), ...]\n
+    3D Bounding Box
+            •------------------•
+           /¦                 /¦
+          / ¦                / ¦
+         /  ¦               /  ¦
+        •------------------V2  ¦
+        ¦   ¦              ¦   ¦
+        ¦   ¦              ¦   ¦
+        ¦   ¦              ¦   ¦
+        ¦   ¦              ¦   ¦
+        ¦   ¦              ¦   ¦           z
+        ¦   V1-------------¦---•           ⋮
+        ¦  /               ¦  /            o ⋯ x
+        ¦ /                ¦ /           ⋰
+        ¦/                 ¦/           y
+        •------------------• 
+    """
     label_array = get_pixel_value(label_path)
     num_category = int(np.max(label_array))  # 类的数量
     categories = []  # 类别
@@ -366,7 +392,7 @@ def get_max_component(mask_image: sitk.Image) -> sitk.Image:
 
 def get_binary_image(image: sitk.Image, threshold: int = -200) -> sitk.Image:
     """
-    CT threshold = -200, SUVbw threshold = 3e-2
+    将图像进行二值化: CT threshold = -200, SUVbw threshold = 3e-2
     """
     return sitk.BinaryThreshold(image, lowerThreshold=threshold, upperThreshold=1e8)
 

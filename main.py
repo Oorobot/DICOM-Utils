@@ -12,100 +12,214 @@ import numpy as np
 import pandas as pd
 import pydicom
 import SimpleITK as sitk
+from matplotlib.cm import get_cmap
 from mlxtend.evaluate import mcnemar, mcnemar_table  # 用于计算显著性水平 p
 from skimage import measure
+from utils.html import HTML
 
 from utils.dicom import (
+    HU2image,
+    SUVbw2image,
     read_serises_image,
-    resample_based_target_image,
-    resample_based_spacing,
     resameple_based_size,
+    resample_based_spacing,
+    resample_based_target_image,
 )
 from utils.utils import delete, load_json, mkdir, rename, save_json, to_pinyin
 
-normal_folder_name = "D:/admin/Desktop/Data/PETCT-FRI/NormalData"
-processed_folder_name = "D:/admin/Desktop/Data/PETCT-FRI/ProcessedData"
-fri_xlsx = "D:/admin/Desktop/Data/PETCT-FRI/PET-FRI.xlsx"
+
+def draw_label_type(draw_img, bbox, label, label_color):
+    labelSize = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)[0]
+    if bbox[1] - labelSize[1] - 3 < 0:
+        cv2.rectangle(
+            draw_img,
+            (bbox[0], bbox[1] + 2),
+            (bbox[0] + labelSize[0], bbox[1] + labelSize[1] + 3),
+            color=label_color,
+            thickness=-1,
+        )
+        cv2.putText(
+            draw_img,
+            label,
+            (bbox[0], bbox[1] + labelSize[1] + 3),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.5,
+            (0, 0, 0),
+            thickness=1,
+        )
+    else:
+        cv2.rectangle(
+            draw_img,
+            (bbox[0], bbox[1] - labelSize[1] - 3),
+            (bbox[0] + labelSize[0], bbox[1] - 3),
+            color=label_color,
+            thickness=-1,
+        )
+        cv2.putText(
+            draw_img,
+            label,
+            (bbox[0], bbox[1] - 3),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.5,
+            (0, 0, 0),
+            thickness=1,
+        )
 
 
-# def data_propress(image_id, input_shape=[128, 196, 196]):
-#     crop_position = LABEL_INFOMATION[image_id]["crop_position"]
-#     # ------------------------------#
-#     #   读取图像
-#     # ------------------------------#
-#     ct = sitk.ReadImage(os.path.join(DATA_FOLDER, f"{image_id}_CT.nii.gz"))
-#     pet = sitk.ReadImage(os.path.join(DATA_FOLDER, f"{image_id}_SUVbw.nii.gz"))
-#     label_body = sitk.ReadImage(
-#         os.path.join(DATA_FOLDER, f"{image_id}_Label_Body.nii.gz")
+"""
+    可视化探测结果
+"""
+# dt_dir = "Files/detection-results"
+# annotations = load_json("Files/image_2mm.json")
+# str2int = {"infected_lesion": 1, "uninfected_lesion": 2, "bladder": 3, "other": 4}
+# int2str = {
+#     1: "GT: infected",
+#     2: "GT: uninfected",
+#     3: "GT: bladder",
+#     5: "DT: infected",
+#     6: "DT: uninfected",
+#     7: "DT: bladder",
+# }
+# int2color = {
+#     3: (255, 0, 0),  # 红色
+#     2: (0, 255, 0),  # 绿色
+#     1: (0, 0, 255),  # 蓝色
+#     7: (255, 115, 0),
+#     6: (0, 215, 255),
+#     5: (139, 0, 255),
+# }
+# gray_cmap = get_cmap("gray")
+# gray_colors = gray_cmap(np.linspace(0, 1, gray_cmap.N))[:, :3]
+# hot_cmap = get_cmap("hot")
+# hot_colors = hot_cmap(np.linspace(0, 1, hot_cmap.N))[:, :3]
+
+
+# for file in os.listdir(dt_dir):
+#     no = file.split(".")[0]
+#     with open(os.path.join(dt_dir, file)) as f:
+#         lines = f.readlines()
+#     dts = []
+#     for line in lines:
+#         c, _, *bb = line.strip().split()
+#         dts.append([str2int[c]] + [int(v) for v in bb])
+#     labels = annotations[no]["labels"]
+#     gts = [[str2int[label["category"]]] + label["position"] for label in labels]
+#     object_image = sitk.ReadImage(
+#         os.path.join("Files/val_2mm", f"{no}_Label_Object.nii.gz")
 #     )
-#     # 根据 crop_position 进行裁剪 ct
-#     crop_index = (np.array(crop_position[0:3]) + 1).tolist()
-#     crop_size = (
-#         np.array(crop_position[3:6]) - np.array(crop_position[0:3]) - 2
-#     ).tolist()
+#     object_array = sitk.GetArrayFromImage(object_image)
+#     dt_array = np.zeros_like(object_array)
+#     upper = dt_array.shape[::-1]
+#     for gt in gts:
+#         for i in range(3):
+#             gt[i + 4] -= 1
+#         c, x1, y1, z1, x2, y2, z2 = gt
+#         if c == 4:
+#             continue
+#         xy = np.full((y2 - y1, x2 - x1), c)
+#         dt_array[z1, y1:y2, x1:x2] = xy
+#         dt_array[z2, y1:y2, x1:x2] = xy
+#         xz = np.full((z2 - z1, x2 - x1), c)
+#         dt_array[z1:z2, y1, x1:x2] = xz
+#         dt_array[z1:z2, y2, x1:x2] = xz
+#         yz = np.full((z2 - z1, y2 - y1), c)
+#         dt_array[z1:z2, y1:y2, x1] = yz
+#         dt_array[z1:z2, y1:y2, x2] = yz
+#     for dt in dts:
+#         for i in range(3):
+#             dt[i + 1] = max(dt[i + 1], 0)
+#             dt[i + 4] = min(dt[i + 4], upper[i]) - 1
+#         c, x1, y1, z1, x2, y2, z2 = dt
+#         xy = np.full((y2 - y1, x2 - x1), c + 4)
+#         dt_array[z1, y1:y2, x1:x2] = xy
+#         dt_array[z2, y1:y2, x1:x2] = xy
+#         xz = np.full((z2 - z1, x2 - x1), c + 4)
+#         dt_array[z1:z2, y1, x1:x2] = xz
+#         dt_array[z1:z2, y2, x1:x2] = xz
+#         yz = np.full((z2 - z1, y2 - y1), c + 4)
+#         dt_array[z1:z2, y1:y2, x1] = yz
+#         dt_array[z1:z2, y1:y2, x2] = yz
+#     # 保存.nii.gz图像
+#     # dt_image = sitk.GetImageFromArray(dt_array)
+#     # sitk.WriteImage(dt_image, f"Files/val_2mm/{no}.nii.gz")
+#     # 保存 xz 平面图像, 求病灶间 y 区间的最小交集
+#     for dt in dts:
+#         dt[0] += 4
+#     ts = gts + dts
+#     ts.sort(key=lambda x: x[2])
+#     union, tmp = [], None
+#     for t in ts:
+#         c, x1, y1, z1, x2, y2, z2 = t
+#         if tmp is None:
+#             tmp = [y1, y2, [[c, x1, z1, x2, z2]]]
+#         else:
+#             ma = max(tmp[0], y1)
+#             mi = min(tmp[1], y2)
+#             if ma < mi:
+#                 tmp[0] = ma
+#                 tmp[1] = mi
+#                 tmp[2].append([c, x1, z1, x2, z2])
+#             else:
+#                 union.append(tmp)
+#                 tmp = [y1, y2, [[c, x1, z1, x2, z2]]]
+#     if tmp is not None:
+#         union.append(tmp)
+#     # 读取 CT 和 SUV
+#     ct_image = sitk.ReadImage(os.path.join("Files/val_2mm", f"{no}_CT.nii.gz"))
+#     suv_image = sitk.ReadImage(os.path.join("Files/val_2mm", f"{no}_CT.nii.gz"))
+#     ct_array = sitk.GetArrayFromImage(ct_image)
+#     suv_array = sitk.GetArrayFromImage(suv_image)
+#     hu = HU2image(ct_array, 300, 1500, True)
+#     suvbw = SUVbw2image(suv_array, 0.1 * np.max(suv_array), True)
+#     for i, u in enumerate(union):
+#         y = (int)((u[0] + u[1]) / 2)
+#         hu_slice = hu[:, y, :]
+#         suvbw_slice = suvbw[:, y, :]
 
-#     cropped_ct = sitk.Extract(ct, size=crop_size, index=crop_index)
-#     # 重采样PET
-#     resampled_pet = resample_based_target_image(pet, ct)
-#     # 根据 crop_position 进行裁剪 pet
-#     cropped_pet = sitk.Extract(resampled_pet, size=crop_size, index=crop_index)
-#     # 根据 crop_position 进行裁剪 pet
-#     cropped_body = sitk.Extract(label_body, size=crop_size, index=crop_index)
+#         hu_image = gray_colors[hu_slice]
+#         suv_image = hot_colors[suvbw_slice]
+#         # BGR -> RGB
+#         suv_image = suv_image[:, :, ::-1]
+#         petct = cv2.addWeighted(hu_image, 0.7, suv_image, 0.3, 0)
+#         hu_image = np.ascontiguousarray(np.flip(hu_image, 0))
+#         suv_image = np.ascontiguousarray(np.flip(suv_image, 0))
+#         petct = np.ascontiguousarray(np.flip(petct, 0))
 
-#     print(cropped_ct.GetSize())
-#     # 计算新的 resample 大小 crop_size = [W, H, D]
-#     iw, ih, id = (
-#         crop_position[3] - crop_position[0],
-#         crop_position[4] - crop_position[1],
-#         crop_position[5] - crop_position[2],
-#     )
-#     d, h, w = input_shape
+#         max_z = hu_image.shape[0] - 1
+#         for b in u[2]:
+#             if b[0] == 4:
+#                 continue
+#             tmp = max_z - b[4]
+#             b[4] = max_z - b[2]
+#             b[2] = tmp
+#             cv2.rectangle(hu_image, b[1:3], b[3:5], color=int2color[b[0]], thickness=1)
+#             draw_label_type(hu_image, b[1:5], int2str[b[0]], int2color[b[0]])
+#             cv2.rectangle(suv_image, b[1:3], b[3:5], color=int2color[b[0]], thickness=1)
+#             draw_label_type(suv_image, b[1:5], int2str[b[0]], int2color[b[0]])
+#             cv2.rectangle(petct, b[1:3], b[3:5], color=int2color[b[0]], thickness=1)
+#             draw_label_type(petct, b[1:5], int2str[b[0]], int2color[b[0]])
+#         img = np.hstack([hu_image, suv_image, petct])
+#         # cv2.imshow("img", img)
+#         # cv2.waitKey(0)
+#         # cv2.destroyAllWindows()
+#         cv2.imwrite(f"Files/val_2mm_jpg/{no}.{i}.png", img * 255)
 
-#     scale = min(w / iw, h / ih, d / id)
-#     nw = int(iw * scale)
-#     nh = int(ih * scale)
-#     nd = int(id * scale)
 
-#     # resample 到 新的大小去
-#     resampled_ct = resameple_based_size(cropped_ct, [nw, nh, nd])
-#     resampled_pet = resameple_based_size(cropped_pet, [nw, nh, nd])
-#     resampled_body = resameple_based_size(cropped_body, [nw, nh, nd], True)
-#     print(resampled_ct.GetSize())
-#     dx = (w - nw) // 2
-#     dx_ = w - nw - dx
-#     dy = (h - nh) // 2
-#     dy_ = h - nh - dy
-#     dz = (d - nd) // 2
-#     dz_ = d - nd - dz
-#     # 提取array, 进行padding, 随后进行预处理
-#     resampled_ct_array = sitk.GetArrayFromImage(resampled_ct)
-#     resampled_pet_array = sitk.GetArrayFromImage(resampled_pet)
-#     resampled_body_array = sitk.GetArrayFromImage(resampled_body)
-#     resampled_ct_array = (
-#         resampled_ct_array * (resampled_body_array) + (1 - resampled_body_array) * -1000
-#     )
-#     resampled_pet_array = resampled_pet_array * resampled_body_array
+"""
+    网页生成，查看图片
+"""
 
-#     ct_array = np.pad(
-#         resampled_ct_array, ((dz, dz_), (dy, dy_), (dx, dx_)), constant_values=-1000
-#     )
-#     pet_array = np.pad(resampled_pet_array, ((dz, dz_), (dy, dy_), (dx, dx_)))
-
-#     ct_image = sitk.GetImageFromArray(ct_array)
-#     ct_image.SetOrigin(resampled_ct.GetOrigin())
-#     ct_image.SetSpacing(resampled_ct.GetSpacing())
-#     ct_image.SetDirection(resampled_ct.GetDirection())
-#     pet_image = sitk.GetImageFromArray(pet_array)
-#     pet_image.SetOrigin(resampled_pet.GetOrigin())
-#     pet_image.SetSpacing(resampled_pet.GetSpacing())
-#     pet_image.SetDirection(resampled_pet.GetDirection())
-#     sitk.WriteImage(ct_image, f"{image_id}.nii.gz")
-#     sitk.WriteImage(pet_image, f"{image_id}_.nii.gz")
-
-# 将label的数据类型转换为 int32
-
-labels = glob(os.path.join(processed_folder_name, "*Label*"))
-for label in labels:
-    label_image = sitk.ReadImage(label)
-    resampeld_label = resample_based_target_image(label_image, label_image, True)
-    sitk.WriteImage(resampeld_label, os.path.join("./Files", os.path.basename(label)))
+html = HTML("骨折相关感染", "Files", "val_2mm_jpg")
+vals = os.listdir("Files/detection-results")
+nos = [val.split(".")[0] for val in vals]
+for no in nos:
+    html.add_header(no)
+    imgs = glob(f"Files/val_2mm_jpg/{no}*")
+    titles = []
+    ims = []
+    for img in imgs:
+        img_name = os.path.basename(img)
+        ims.append(img_name)
+        titles.append(img_name.split(".")[1])
+    html.add_images(ims, titles)
+html.save()
