@@ -19,8 +19,8 @@ class HTML:
         self.img_dir = img_dir
         if not os.path.exists(self.web_dir):
             os.makedirs(self.web_dir)
-        if not os.path.exists(self.img_dir):
-            os.makedirs(self.img_dir)
+        if not os.path.exists(os.path.join(self.web_dir, self.img_dir)):
+            os.makedirs(os.path.join(self.web_dir, self.img_dir))
 
         self.doc = dominate.document(title=title)
         if refresh > 0:
