@@ -10,7 +10,7 @@ import pandas as pd
 import SimpleITK as sitk
 
 from utils.dicom import (
-    ct2image,
+    normalize_ct_hu,
     get_SUV_in_GE,
     read_serises_image,
     resample_based_target_image,
@@ -172,13 +172,11 @@ for segmentation_file in SEGMENTATION_FILES:
 
     # 对每个肺部切片开始处理
     for i in range(slice_length):
-
         # 获取当前分割标签d
         current_segmaentation_array = segmentation_array[i]
 
         # 有分割图时，进行处理
         if 0 != np.max(current_segmaentation_array):
-
             # 获取当前CT文件名
             current_CT_filename = lung_CT_files[i].split("\\")[-1][:-4]
             print(
@@ -187,7 +185,7 @@ for segmentation_file in SEGMENTATION_FILES:
 
             # 获取当前的HU和SUVbw
             current_HU = lung_HU[i]
-            current_HU_img = ct2image(copy.deepcopy(current_HU), 0, 2000, True)
+            current_HU_img = normalize_ct_hu(copy.deepcopy(current_HU), 0, 2000, True)
             current_SUVbw = lung_SUVbw[i]
 
             # 由于每张图片可能存在多个病灶，所以需要定位出每个病灶并计算出每个病灶的suv max，min，mean
@@ -214,7 +212,6 @@ for segmentation_file in SEGMENTATION_FILES:
 
             # 处理每个病灶
             for idx, contour in enumerate(contours):
-
                 contour = np.squeeze(contour)
                 if len(contour.shape) == 1:
                     break
@@ -324,7 +321,7 @@ for segmentation_file in SEGMENTATION_FILES:
                         image_folder,
                         f"{dir_name}_{current_CT_filename}_{str(idx).zfill(2)}_croped.jpg",
                     ),
-                    ct2image(copy.deepcopy(cropped_HU), 0, 2000, True),
+                    normalize_ct_hu(copy.deepcopy(cropped_HU), 0, 2000, True),
                     [int(cv2.IMWRITE_JPEG_QUALITY), 100],
                 )
                 cv2.imwrite(

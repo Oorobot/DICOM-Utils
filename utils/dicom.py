@@ -8,6 +8,7 @@ import SimpleITK as sitk
 
 from utils.utils import str2datetime
 
+
 # -----------------------------------------------------------#
 #                     读取一系列的图像
 # -----------------------------------------------------------#
@@ -180,7 +181,7 @@ DICOM_TAG = {
 }
 
 
-def get_patient_info(filename: str, dicom_tag: dict = DICOM_TAG):
+def get_patient_infomation(filename: str, dicom_tag: dict = DICOM_TAG):
     file = pydicom.dcmread(filename)
     information = {}
     for key, value in dicom_tag.items():
@@ -195,27 +196,29 @@ def get_patient_info(filename: str, dicom_tag: dict = DICOM_TAG):
 # -----------------------------------------------------------#
 #                      图像转换
 # -----------------------------------------------------------#
-def HU2image(
+def normalize_ct_hu(
     pixel_value: np.ndarray,
     window_center: float,
     window_width: float,
-    to_uint8: bool = False,
+    to_image: bool = False,
 ):
     window_min = window_center - window_width * 0.5
     window_max = window_center + window_width * 0.5
     np.clip(pixel_value, window_min, window_max, pixel_value)
-    image = (pixel_value - window_min) / window_width
-    if to_uint8:
-        image = (image * 255).astype(np.uint8)
-    return image
+    value = (pixel_value - window_min) / window_width
+    if to_image:
+        value = (value * 255).astype(np.uint8)
+    return value
 
 
-def SUVbw2image(pixel_value: np.ndarray, SUVbw_max: float, to_uint8: bool = False):
+def normalize_pet_suv(
+    pixel_value: np.ndarray, SUVbw_max: float, to_image: bool = False
+):
     np.clip(pixel_value, 0, SUVbw_max, pixel_value)
-    image = pixel_value / SUVbw_max
-    if to_uint8:
-        image = (image * 255).astype(np.uint8)
-    return image
+    value = pixel_value / SUVbw_max
+    if to_image:
+        value = (value * 255).astype(np.uint8)
+    return value
 
 
 # -----------------------------------------------------------#
@@ -296,7 +299,7 @@ def resameple_based_size(image: sitk.Image, output_size: list, is_label: bool = 
 #                   获取三维标注（立方体）
 # -----------------------------------------------------------#
 def get_3D_annotation(label_path: str) -> Tuple[List[int], List[List[int]]]:
-    """ 
+    """
     读取itk-snap软件标注的三维边界框以及类别信息
     label_path: 标注数据文件(.nii.gz)路径
     return: 类别 [c1, ...] 和 三维边界框 [(x1, y1, z1, x2, y2, z2), ...]\n
@@ -315,7 +318,7 @@ def get_3D_annotation(label_path: str) -> Tuple[List[int], List[List[int]]]:
         ¦  /               ¦  /            o ⋯ x
         ¦ /                ¦ /           ⋰
         ¦/                 ¦/           y
-        •------------------• 
+        •------------------•
     """
     label_array = get_pixel_value(label_path)
     num_category = int(np.max(label_array))  # 类的数量
@@ -397,7 +400,7 @@ def get_binary_image(image: sitk.Image, threshold: int = -200) -> sitk.Image:
     return sitk.BinaryThreshold(image, lowerThreshold=threshold, upperThreshold=1e8)
 
 
-def binary_morphological_closing(mask_image: sitk.Image, kernel_radius=2)->sitk.Image:
+def binary_morphological_closing(mask_image: sitk.Image, kernel_radius=2) -> sitk.Image:
     bmc_filter = sitk.BinaryMorphologicalClosingImageFilter()
     bmc_filter.SetKernelType(sitk.sitkBall)
     bmc_filter.SetKernelRadius(kernel_radius)
@@ -424,13 +427,9 @@ def get_body(
     suv_binary = get_binary_image(suv_image, 3e-2)
 
     # 对CT进行闭操作，取最大连通量
-    ct_binary_closing_max = get_max_component(
-        binary_morphological_closing(ct_binary)
-    )
+    ct_binary_closing_max = get_max_component(binary_morphological_closing(ct_binary))
     # 对SUV进行闭操作，取最大连通量
-    suv_binary_closing_max = get_max_component(
-        binary_morphological_closing(suv_binary)
-    )
+    suv_binary_closing_max = get_max_component(binary_morphological_closing(suv_binary))
 
     ct_no_machine = sitk.And(ct_binary_closing_max, suv_binary_closing_max)
     # 取最大连通量
@@ -439,4 +438,3 @@ def get_body(
     # 使用超大半径的闭操作，消除伪影
     ct_no_machine_max_closing = binary_morphological_closing(ct_no_machine_max, 20)
     return ct_no_machine_max_closing
- 

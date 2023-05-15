@@ -13,15 +13,10 @@ class HTML:
     img_dir: web_dir文件夹下一个存放需要展示图像的文件夹名
     """
 
-    def __init__(self, title: str, web_dir: str, img_dir: str, refresh: int = 0):
+    def __init__(self, title: str, img_dir: str, refresh: int = 0):
         self.title = title
-        self.web_dir = web_dir
         self.img_dir = img_dir
-        if not os.path.exists(self.web_dir):
-            os.makedirs(self.web_dir)
-        if not os.path.exists(os.path.join(self.web_dir, self.img_dir)):
-            os.makedirs(os.path.join(self.web_dir, self.img_dir))
-
+        self.web_dir = os.path.dirname(self.img_dir)
         self.doc = dominate.document(title=title)
         if refresh > 0:
             with self.doc.head:

@@ -35,7 +35,7 @@ from vtkmodules.vtkRenderingCore import (
 from vtkmodules.vtkRenderingFreeType import vtkVectorText
 from vtkmodules.vtkRenderingVolume import vtkFixedPointVolumeRayCastMapper
 
-from utils.dicom import SUVbw2image
+from utils.dicom import normalize_pet_suv
 from utils.utils import load_json
 
 # -----------------------------------------------------------#
@@ -216,7 +216,7 @@ def ct_vtk_volume(ct_array: np.ndarray, origin: list, spacing: list):
 #                      vtk volume
 # -----------------------------------------------------------#
 def suv_vtk_volume(suv_array: np.ndarray, origin: list, spacing: list):
-    array = SUVbw2image(suv_array, 2.5)
+    array = normalize_pet_suv(suv_array, 2.5)
     suv = sitk.GetArrayFromImage(sitk.GetImageFromArray(array))
 
     # 创建 vtk 图像
@@ -274,7 +274,7 @@ def suv_vtk_volume(suv_array: np.ndarray, origin: list, spacing: list):
 # -----------------------------------------------------------#
 def suv_point_cloud(suv_array: np.ndarray, origin: list, spacing: list):
     shape = suv_array.shape
-    suv_image = SUVbw2image(suv_array, 2.5, True)
+    suv_image = normalize_pet_suv(suv_array, 2.5, True)
 
     hot_cmap = get_cmap("hot")
     hot_colors = hot_cmap(np.linspace(0, 1, 256))

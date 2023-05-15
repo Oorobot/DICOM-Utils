@@ -42,7 +42,7 @@ def mkdirs(dirs):
 def rename(src, dst):
     try:
         os.rename(src, dst)
-    except (FileNotFoundError):
+    except FileNotFoundError:
         print("the dir is not existed.")
 
 
@@ -124,23 +124,38 @@ def str2datetime(time: str) -> datetime:
     return date_time
 
 
-# -----------------------------------------------------------#
-#              三维体素图像与定位框的旋转和翻转
-# -----------------------------------------------------------#
-def flip_3D_bounding_box(image_size, point1, point2, axis):
-    """
-    image_size = (D, H, W): 三维物体的大小
-    point1 = (z1, y1, x1): 三维标注中对角的第一个点
-    point2 = (z2, y2, x2): 三维标注中对角的第二个点(x2>x1, y2>y1, z2>z1)
-    axes: 沿哪个轴进行翻转
-    """
-    assert axis == 0 or axis == 1 or axis == 2
-    point1[axis] = image_size[axis] - point1[axis]
-    point2[axis] = image_size[axis] - point2[axis]
-    return point1, point2
+# ---------------------------------------------------#
+#  数据增强
+# ---------------------------------------------------#
+def random_flip(ct_patch: np.ndarray, suv_patch: np.ndarray, boxes: np.ndarray):
+    axis = np.random.randint(0, 3)
+    ct_p = np.flip(ct_patch, 2 - axis)
+    suv_p = np.flip(suv_patch, 2 - axis)
+    axis_size = ct_patch.shape[2 - axis]
+    for box in boxes:
+        # box: [x1, y1, z1, x2, y2, z2, c]
+        # ct shape: [D, H, W]
+        box[axis], box[axis + 3] = axis_size - box[axis + 3], axis_size - box[axis]
+    return ct_p, suv_p, boxes
 
 
-def rot90_3D_bounding_box(image_size, point1, point2, k, axes):
+def random_rot90(ct_patch: np.ndarray, suv_patch: np.ndarray, boxes: list):
+    k = np.random.randint(0, 4)
+    _axes = [(0, 1), (0, 2), (1, 2)]
+    axes = _axes[np.random.randint(0, 3)]
+    ct_p = np.rot90(ct_patch, k, axes)
+    suv_p = np.rot90(suv_patch, k, axes)
+    b = []
+    for box in boxes:
+        # box: [x1, y1, z1, x2, y2, z2, c]
+        point1 = list(reversed(box[0:3]))
+        point2 = list(reversed(box[3:6]))
+        point1, point2 = rot90_3D_annotation(ct_patch.shape, point1, point2, k, axes)
+        b.append(list(reversed(point1)) + list(reversed(point2)) + [box[-1]])
+    return ct_p, suv_p, b
+
+
+def rot90_3D_annotation(image_size, point1, point2, k, axes):
     """
     image_size = (D, H, W): 三维物体的大小
     point1 = (z1, y1, x1): 三维标注中对角的第一个点
@@ -166,39 +181,3 @@ def rot90_3D_bounding_box(image_size, point1, point2, k, axes):
     point1[axes[0]], point1[axes[1]] = y1_, x1_
     point2[axes[0]], point2[axes[1]] = y2_, x2_
     return point1, point2
-
-
-def flip(image_array: np.ndarray, boxes: list, axis=None):
-    if axis is None:
-        axis = np.random.randint(0, 4)
-        print("axis: ", axis)
-    axis = axis % 3
-    array = np.flip(image_array, axis)
-    b = []
-    for box in boxes:
-        point1 = list(reversed(box[0:3]))
-        point2 = list(reversed(box[3:6]))
-        point1, point2 = flip_3D_bounding_box(image_array.shape, point1, point2, axis)
-        b.append(list(reversed(point1)) + list(reversed(point2)))
-    return array, b
-
-
-def rot90(image_array: np.ndarray, boxes: list, k=None, axes=None):
-    if k is None:
-        k = np.random.randint(1, 4)
-        print("k: ", k)
-    if axes is None:
-        choosed_axes = [(0, 1), (0, 2), (1, 2)]
-        axes = choosed_axes[np.random.randint(0, 3)]
-        print("axes: ", axes)
-    k = k % 4
-    array = np.rot90(image_array, k, axes)
-    b = []
-    for box in boxes:
-        point1 = list(reversed(box[0:3]))
-        point2 = list(reversed(box[3:6]))
-        point1, point2 = rot90_3D_bounding_box(
-            image_array.shape, point1, point2, k, axes
-        )
-        b.append(list(reversed(point1)) + list(reversed(point2)))
-    return array, b
