@@ -1,5 +1,7 @@
+import argparse
 import os
 
+import matplotlib
 import numpy as np
 import SimpleITK as sitk
 import vtk
@@ -9,10 +11,7 @@ import vtkmodules.vtkInteractionStyle
 
 # noinspection PyUnresolvedReferences
 import vtkmodules.vtkRenderingOpenGL2
-
-# noinspection PyUnresolvedReferences
 import vtkmodules.vtkRenderingVolumeOpenGL2
-from matplotlib.cm import get_cmap
 from vtkmodules.util.vtkImageImportFromArray import vtkImageImportFromArray
 from vtkmodules.vtkCommonColor import vtkNamedColors
 from vtkmodules.vtkCommonCore import vtkFloatArray, vtkLookupTable, vtkPoints
@@ -21,6 +20,10 @@ from vtkmodules.vtkCommonDataModel import (
     vtkPiecewiseFunction,
     vtkPolyData,
 )
+
+# noinspection PyUnresolvedReferences
+from vtkmodules.vtkCommonTransforms import vtkTransform
+from vtkmodules.vtkRenderingAnnotation import vtkAxesActor
 from vtkmodules.vtkRenderingCore import (
     vtkActor,
     vtkColorTransferFunction,
@@ -37,6 +40,22 @@ from vtkmodules.vtkRenderingVolume import vtkFixedPointVolumeRayCastMapper
 
 from utils.dicom import normalize_pet_suv
 from utils.utils import load_json
+
+
+def flipXY(array):
+    array = np.flip(array, axis=1)
+    array = np.flip(array, axis=2)
+    return array
+
+
+def flip_boxXY(box, size):
+    for b in box:
+        print(b, end=' -> ')
+        b[0], b[3] = size[0] - b[3], size[0] - b[0]  # X
+        b[1], b[4] = size[1] - b[4], size[1] - b[1]  # Y
+        print(b)
+    return box
+
 
 # -----------------------------------------------------------#
 #                       自定义键盘交互
@@ -145,7 +164,7 @@ def vtk_bounding_boxes(boxes, origin, spacing, texts, colors):
         textMapper.SetInputConnection(vtk_text.GetOutputPort())
         textActor = vtkFollower()
         textActor.SetMapper(textMapper)
-        textActor.SetScale(10, 10, 10)
+        textActor.SetScale(20, 20, 20)
         textActor.AddPosition(x2, y2, z2)
         textActor.GetProperty().SetColor(*color)
 
@@ -156,8 +175,11 @@ def vtk_bounding_boxes(boxes, origin, spacing, texts, colors):
 # -----------------------------------------------------------#
 #                      vtk volume
 # -----------------------------------------------------------#
-def ct_vtk_volume(ct_array: np.ndarray, origin: list, spacing: list):
-    ct_array = np.clip(ct_array, -450, 1050)
+def ct_vtk_volume(ct_array: np.ndarray, origin: list, spacing: list, body_array=None):
+    # ct_array = np.clip(ct_array, -450, 1050)
+    if body_array is not None:
+        ct_array = ct_array * body_array + (1 - body_array) * -1000
+
     ct_array = sitk.GetArrayFromImage(
         sitk.GetImageFromArray(ct_array.astype(np.float32))
     )
@@ -176,7 +198,7 @@ def ct_vtk_volume(ct_array: np.ndarray, origin: list, spacing: list):
 
     # 使用颜色转换函数，对不同的值设置不同的函数
     volume_color = vtkColorTransferFunction()
-    cmap = get_cmap("gray")
+    cmap = matplotlib.colormaps["gray"]
     colors = cmap(np.linspace(0, 1, cmap.N))
     rgb_point = np.linspace(-450, 1050, 256)
     for i in range(0, 256):
@@ -185,9 +207,10 @@ def ct_vtk_volume(ct_array: np.ndarray, origin: list, spacing: list):
     # 使用透明度转换函数，用于控制不同组织之间的透明度
     volume_scalar_opacity = vtkPiecewiseFunction()
     volume_scalar_opacity.AddPoint(0, 0.00)
-    volume_scalar_opacity.AddPoint(500, 0.15)
-    volume_scalar_opacity.AddPoint(1000, 0.15)
-    volume_scalar_opacity.AddPoint(1150, 0.85)
+    volume_scalar_opacity.AddPoint(100, 0.35)
+    volume_scalar_opacity.AddPoint(500, 0.65)
+    volume_scalar_opacity.AddPoint(1000, 0.65)
+    volume_scalar_opacity.AddPoint(1150, 0.90)
 
     # 梯度不透明度函数用于降低体积“平坦”区域的不透明度，同时保持组织类型之间边界的不透明度。梯度是以强度在单位距离上的变化量来测量的
     volume_gradient_opacity = vtkPiecewiseFunction()
@@ -234,17 +257,15 @@ def suv_vtk_volume(suv_array: np.ndarray, origin: list, spacing: list):
     # 使用颜色转换函数，对不同的值设置不同的函数
     volume_color = vtkColorTransferFunction()
     linspace = np.linspace(0, 1, 256)
-    hot_cmap = get_cmap("hot")
+    hot_cmap = matplotlib.colormaps["hot"]
     hot_colors = hot_cmap(linspace)
     for i in range(0, 256):
         volume_color.AddRGBPoint(linspace[i], *hot_colors[i, 0:3])
 
     # 使用透明度转换函数，用于控制不同组织之间的透明度
     volume_scalar_opacity = vtkPiecewiseFunction()
-    volume_scalar_opacity.AddPoint(0, 0.0)
-    volume_scalar_opacity.AddPoint(0.4, 0.15)
-    volume_scalar_opacity.AddPoint(0.8, 0.15)
-    volume_scalar_opacity.AddPoint(0.9, 0.85)
+    for i in range(10):
+        volume_scalar_opacity.AddPoint(i / 10, i / 10)
 
     # 梯度不透明度函数用于降低体积“平坦”区域的不透明度，同时保持组织类型之间边界的不透明度。梯度是以强度在单位距离上的变化量来测量的
     volume_gradient_opacity = vtkPiecewiseFunction()
@@ -272,11 +293,13 @@ def suv_vtk_volume(suv_array: np.ndarray, origin: list, spacing: list):
 # -----------------------------------------------------------#
 #                     vtk point cloud
 # -----------------------------------------------------------#
-def suv_point_cloud(suv_array: np.ndarray, origin: list, spacing: list):
+def suv_point_cloud(
+    suv_array: np.ndarray, origin: list, spacing: list, body_array=None
+):
     shape = suv_array.shape
     suv_image = normalize_pet_suv(suv_array, 2.5, True)
 
-    hot_cmap = get_cmap("hot")
+    hot_cmap = matplotlib.colormaps["hot"]
     hot_colors = hot_cmap(np.linspace(0, 1, 256))
 
     points = vtkPoints()
@@ -284,14 +307,19 @@ def suv_point_cloud(suv_array: np.ndarray, origin: list, spacing: list):
     scalars = vtkFloatArray()
     cells = vtkCellArray()
 
-    total = np.sum((suv_array > 1e-3).astype(np.uint8))
+    if body_array is None:
+        total = np.sum((suv_array > 1e-3).astype(np.uint8))
+    else:
+        total = np.sum(body_array.astype(np.uint8))
     lookup.SetNumberOfTableValues(total)
 
     i = 0
     for d in range(shape[0]):
         for h in range(shape[1]):
             for w in range(shape[2]):
-                if suv_array[d, h, w] <= 1e-3:
+                if body_array is None and suv_array[d, h, w] <= 1e-3:
+                    continue
+                if body_array is not None and body_array[d, h, w] == 0:
                     continue
                 scalars.InsertNextTuple1(i)
                 x, y, z = np.array([w, h, d]) * np.array(spacing) + np.array(origin)
@@ -324,91 +352,139 @@ def suv_point_cloud(suv_array: np.ndarray, origin: list, spacing: list):
     return polygonActor
 
 
-if __name__ == "__main__":
-    image_id = "011"
-    label_json = "Files/image_2mm.json"
-    detection_txt = "Files/011.txt"
-    input_shape = [384, 96, 160]
+TEXTS = ["infected", "uninfected", "bladder", "lesion"]
+GT_COLOR = [(255, 0, 0), (0, 255, 0), (0, 0, 255), (255, 255, 255)]
+DT_COLOR = [(255, 0, 139), (255, 215, 0), (0, 115, 255), (205, 133, 63)]
+IMG_DIR = os.path.join("Files", "FRI", "image_2mm")
 
-    TEXTS = ["infected_lesion", "uninfected_lesion", "bladder"]
-    GT_COLOR = [(255, 0, 0), (255, 82, 50), (221, 80, 53), (255, 158, 129)]
-    DT_COLOR = [(0, 128, 0), (70, 149, 54), (110, 170, 94), (147, 191, 133)]
+parser = argparse.ArgumentParser(description="PETCT 三维可视化")
+parser.add_argument("--no", type=str, default="")
+parser.add_argument("--det-dir", type=str, default="")
+parser.add_argument("--vis", type=str, default="petct")
+parser.add_argument("--no-boxes", action="store_true")
+parser.add_argument("--only-body", action="store_true")
+args = parser.parse_args()
 
-    # 读取文件
-    ct_image = sitk.ReadImage(os.path.join("Files", "2mm", f"{image_id}_CT.nii.gz"))
-    suv_image = sitk.ReadImage(os.path.join("Files", "2mm", f"{image_id}_SUVbw.nii.gz"))
-    ct_array = sitk.GetArrayFromImage(ct_image)
-    suv_array = sitk.GetArrayFromImage(suv_image)
 
-    origin = [0.0, 0.0, 0.0]
-    spacing = ct_image.GetSpacing()
+# 颜色
+vtk_colors = vtkNamedColors()
+vtk_colors.SetColor('BkgColor', [255, 255, 255, 255])
+# 渲染器
+renderer = vtkRenderer()
+# 渲染窗口
+renderWindow = vtkRenderWindow()
+# 渲染窗口添加渲染器
+renderWindow.AddRenderer(renderer)
+# 交互工具可以开启基于鼠标和键盘的与场景的交互能力
+interactor = vtkRenderWindowInteractor()
+# 交互工具绑定渲染窗口
+interactor.SetRenderWindow(renderWindow)
+interactor.SetInteractorStyle(KeyPressStyle())
 
-    gt_boxes = []
-    gt_texts = []
-    gt_colors = []
-    labels = load_json(label_json)[image_id]["labels"]
+
+# 读取文件
+ct_image = sitk.ReadImage(os.path.join(IMG_DIR, f"{args.no}_CT.nii.gz"))
+pet_image = sitk.ReadImage(os.path.join(IMG_DIR, f"{args.no}_SUVbw.nii.gz"))
+ct_array = sitk.GetArrayFromImage(ct_image)
+pet_array = sitk.GetArrayFromImage(pet_image)
+ct_array = flipXY(ct_array)
+pet_array = flipXY(pet_array)
+body_array = None
+if args.only_body:
+    body_array = sitk.GetArrayFromImage(
+        sitk.ReadImage(os.path.join(IMG_DIR, f"{args.no}_Label_Body.nii.gz"))
+    )
+    body_array = flipXY(body_array)
+
+
+# 渲染器的摄像头
+camera = renderer.GetActiveCamera()
+camera.SetViewUp(0, 0, 1)
+camera.Azimuth(30.0)
+camera.Elevation(30.0)
+spacing = ct_image.GetSpacing()  # 像素间距
+size = ct_image.GetSize()  # 图像大小
+origin = ct_image.GetOrigin()  # 原点
+whd = np.array(size) * np.array(spacing)  # 长宽高
+focal_point = np.array(origin) + whd / 2
+camera.SetFocalPoint(focal_point)
+position = [
+    focal_point[0] + whd[2] * 1.25,
+    focal_point[1] + whd[2] * 1.25 * 1.73205,
+    focal_point[2],
+]
+camera.SetPosition(position)
+
+
+# 添加坐标轴
+axes = vtkAxesActor()
+transform = vtkTransform()
+transform.Translate(origin)  # 起始点
+transform.Scale(500, 500, 500)
+axes.SetUserTransform(transform)
+
+# axes.SetXAxisFontSize(1)
+axes.SetXAxisLabelText("C")
+axes.SetYAxisLabelText("S")
+axes.SetZAxisLabelText("T")
+axes.GetXAxisCaptionActor2D().SetHeight(0.05)
+axes.GetYAxisCaptionActor2D().SetHeight(0.05)
+axes.GetZAxisCaptionActor2D().SetHeight(0.05)
+renderer.AddActor(axes)
+
+if "ct" in args.vis:
+    ct_volume = ct_vtk_volume(ct_array, origin, spacing, body_array)
+    renderer.AddViewProp(ct_volume)
+
+if "pet" in args.vis:
+    suv_pc = suv_point_cloud(pet_array, origin, spacing, body_array)
+    renderer.AddActor(suv_pc)
+
+
+if not args.no_boxes:
+    # 读取边界框
+    gt_boxes, dr_boxes = [], []
+    gt_texts, dr_texts = [], []
+    gt_colors, dr_colors = [], []
+    labels = load_json("Files/FRI/image_2mm.json")[args.no]["labels"]
     for label in labels:
         text, box = label["category"], label["position"]
         if text not in TEXTS:
             continue
         color = (np.array(GT_COLOR[TEXTS.index(text)]) / 255.0).tolist()
         gt_boxes.append(box)
+        print("gt_boxes: ", gt_boxes)
         gt_texts.append(text)
         gt_colors.append(color)
-
-    lines = open(detection_txt, "r").readlines()
-    dt_boxes = []
-    dt_texts = []
-    dt_colors = []
+    gt_boxes = flip_boxXY(gt_boxes, size)
+    det_txt = os.path.join(args.det_dir, f"{args.no}.txt")
+    lines = open(det_txt, "r").readlines()
     for line in lines:
         c, _, x1, y1, z1, x2, y2, z2 = line.strip().split()
         color = (np.array(DT_COLOR[TEXTS.index(c)]) / 255.0).tolist()
-        dt_boxes.append([int(_) for _ in [x1, y1, z1, x2, y2, z2]])
-        dt_texts.append(c)
-        dt_colors.append(color)
-
-    # 创建需要渲染的物体
-    ct_volume = ct_vtk_volume(ct_array, origin, spacing)
-    suv_pc = suv_point_cloud(suv_array, origin, spacing)
+        dr_boxes.append([int(_) for _ in [x1, y1, z1, x2, y2, z2]])
+        dr_texts.append(c)
+        dr_colors.append(color)
+    dr_boxes = flip_boxXY(dr_boxes, size)
+    # 创建渲染的物体—— gt 和 dt 定位框
     gt_actors = vtk_bounding_boxes(gt_boxes, origin, spacing, gt_texts, gt_colors)
-    dt_actors = vtk_bounding_boxes(dt_boxes, origin, spacing, dt_texts, dt_colors)
-
-    # 创建渲染器，渲染窗口和交互工具. 渲染器画入在渲染窗口里，交互工具可以开启基于鼠标和键盘的与场景的交互能力
-    renderer = vtkRenderer()
-    renderWindow = vtkRenderWindow()
-    renderWindow.AddRenderer(renderer)
-    interactor = vtkRenderWindowInteractor()
-    interactor.SetRenderWindow(renderWindow)
-    interactor.SetInteractorStyle(KeyPressStyle())
-
-    renderer.AddViewProp(ct_volume)
-    renderer.AddActor(suv_pc)
-    for actor in gt_actors + dt_actors:
+    dr_actors = vtk_bounding_boxes(dr_boxes, origin, spacing, dr_texts, dr_colors)
+    for actor in gt_actors + dr_actors:
         renderer.AddActor(actor)
-
-    # 设置摄像机
-    camera = renderer.GetActiveCamera()
-    c = ct_volume.GetCenter()
-    camera.SetViewUp(0, 0, -1)
-    camera.SetPosition(c[0], c[1] - 400, c[2])
-    camera.SetFocalPoint(c[0], c[1], c[2])
-    camera.Azimuth(30.0)
-    camera.Elevation(30.0)
-
-    # 设置背景颜色
-    renderer.SetBackground(vtkNamedColors().GetColor3d("Grey"))
-
-    renderer.ResetCameraClippingRange()
+    # 标签文本跟着摄像头旋转
     for i in range(1, len(gt_actors), 2):
-        gt_actors[i].SetCamera(renderer.GetActiveCamera())
-    for i in range(1, len(dt_actors), 2):
-        dt_actors[i].SetCamera(renderer.GetActiveCamera())
+        gt_actors[i].SetCamera(camera)
+    for i in range(1, len(dr_actors), 2):
+        dr_actors[i].SetCamera(camera)
 
-    interactor.Initialize()
+# 设置背景颜色
+renderer.SetBackground(vtk_colors.GetColor3d('BkgColor'))
+renderer.ResetCameraClippingRange()
 
-    renderWindow.SetSize(680, 480)
-    renderWindow.SetWindowName(f"PETCT Visualization - {image_id}")
-    renderWindow.Render()
+interactor.Initialize()
+renderWindow.SetSize(1920, 1080)
+renderWindow.SetWindowName(f"PETCT Visualization - {args}")
+renderWindow.Render()
 
-    # 开启交互
-    interactor.Start()
+# 开启交互
+interactor.Start()
