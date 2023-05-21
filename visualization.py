@@ -50,10 +50,8 @@ def flipXY(array):
 
 def flip_boxXY(box, size):
     for b in box:
-        print(b, end=' -> ')
         b[0], b[3] = size[0] - b[3], size[0] - b[0]  # X
         b[1], b[4] = size[1] - b[4], size[1] - b[1]  # Y
-        print(b)
     return box
 
 
@@ -453,7 +451,6 @@ if not args.no_boxes:
             continue
         color = (np.array(GT_COLOR[TEXTS.index(text)]) / 255.0).tolist()
         gt_boxes.append(box)
-        print("gt_boxes: ", gt_boxes)
         gt_texts.append(text)
         gt_colors.append(color)
     gt_boxes = flip_boxXY(gt_boxes, size)
@@ -466,16 +463,13 @@ if not args.no_boxes:
         dr_texts.append(c)
         dr_colors.append(color)
     dr_boxes = flip_boxXY(dr_boxes, size)
-    # 创建渲染的物体—— gt 和 dt 定位框
+    # 创建渲染的物体—— gt 和 dr 定位框
     gt_actors = vtk_bounding_boxes(gt_boxes, origin, spacing, gt_texts, gt_colors)
     dr_actors = vtk_bounding_boxes(dr_boxes, origin, spacing, dr_texts, dr_colors)
-    for actor in gt_actors + dr_actors:
+    for i, actor in enumerate(gt_actors + dr_actors):
         renderer.AddActor(actor)
-    # 标签文本跟着摄像头旋转
-    for i in range(1, len(gt_actors), 2):
-        gt_actors[i].SetCamera(camera)
-    for i in range(1, len(dr_actors), 2):
-        dr_actors[i].SetCamera(camera)
+        if i % 2 == 1:
+            actor.SetCamera(camera)  # 标签文本跟着摄像头旋转
 
 # 设置背景颜色
 renderer.SetBackground(vtk_colors.GetColor3d('BkgColor'))
