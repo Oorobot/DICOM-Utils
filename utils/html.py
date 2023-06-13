@@ -42,7 +42,9 @@ class HTML:
         with self.t:
             with tr():
                 for image, title in zip(images, titles):
-                    image_relative_path = os.path.join(self.img_dir, image)
+                    image_relative_path = os.path.join(
+                        os.path.basename(self.img_dir), image
+                    )
                     with td(
                         style="word-wrap: break-word;", halign="center", valign="top"
                     ):
@@ -57,6 +59,6 @@ class HTML:
 
     def save(self):
         html_file = f"{self.web_dir}/index.html"
-        f = open(html_file, "wt")
+        f = open(html_file, "wt", encoding='utf-8')
         f.write(self.doc.render())
         f.close()

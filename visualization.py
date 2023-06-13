@@ -205,10 +205,13 @@ def ct_vtk_volume(ct_array: np.ndarray, origin: list, spacing: list, body_array=
     # 使用透明度转换函数，用于控制不同组织之间的透明度
     volume_scalar_opacity = vtkPiecewiseFunction()
     volume_scalar_opacity.AddPoint(0, 0.00)
-    volume_scalar_opacity.AddPoint(100, 0.35)
-    volume_scalar_opacity.AddPoint(500, 0.65)
-    volume_scalar_opacity.AddPoint(1000, 0.65)
-    volume_scalar_opacity.AddPoint(1150, 0.90)
+    volume_scalar_opacity.AddPoint(500, 0.15)
+    volume_scalar_opacity.AddPoint(1000, 0.15)
+    volume_scalar_opacity.AddPoint(1150, 0.65)
+    # volume_scalar_opacity.AddPoint(100, 0.35)
+    # volume_scalar_opacity.AddPoint(500, 0.65)
+    # volume_scalar_opacity.AddPoint(1000, 0.65)
+    # volume_scalar_opacity.AddPoint(1150, 0.90)
 
     # 梯度不透明度函数用于降低体积“平坦”区域的不透明度，同时保持组织类型之间边界的不透明度。梯度是以强度在单位距离上的变化量来测量的
     volume_gradient_opacity = vtkPiecewiseFunction()
@@ -345,7 +348,7 @@ def suv_point_cloud(
     polygonActor = vtkActor()
     polygonActor.SetMapper(polygonMapper)
     polygonActor.GetProperty().SetPointSize(1)
-    polygonActor.GetProperty().SetOpacity(0.4)
+    polygonActor.GetProperty().SetOpacity(0.3)
 
     return polygonActor
 
