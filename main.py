@@ -90,7 +90,11 @@ def args_parser():
     parser.add_argument("--op", type=str, choices=['json', 'html'])
     parser.add_argument("--result-file", type=str, default=None)
     parser.add_argument("--preffixes", type=str, nargs="+", default=None)
-    # cfg01_b6_n1_6_rol_one_stage2_pet
+    parser.add_argument("--html-name", type=str, default="index")
+    # 01_b6_n1_6
+    # 01_b6_n1_6_resnet18_d_pet
+    # 01_b6_n1_6_resnet18_d_pet_mip_mixup0.2_result
+    # 01_b6_n1_6__f2_el1
     args = parser.parse_args()
     return args
 
@@ -202,9 +206,11 @@ if __name__ == '__main__':
     if args.op == "html":
         if args.preffixes is None:
             raise Exception("请输入preffixes")
-        html = HTML("骨折相关感染", RESULT_IMAGES)
-        vals = open("Files/FRI/val.txt", 'r').readlines()
-        nos = [val.strip() for val in vals]
+        html = HTML("骨折相关感染", RESULT_IMAGES, file_name=args.html_name)
+        dectetions = json.load(
+            open(os.path.join("Files/FRI/result_files", f"{args.preffixes[0]}.json"))
+        )
+        nos = list(dectetions["ground_truth"].keys())
         nos.sort()
         for no in nos:
             html.add_header(no)

@@ -13,11 +13,12 @@ class HTML:
     img_dir: web_dir文件夹下一个存放需要展示图像的文件夹名
     """
 
-    def __init__(self, title: str, img_dir: str, refresh: int = 0):
+    def __init__(self, title: str, img_dir: str, refresh: int = 0, file_name='index'):
         self.title = title
         self.img_dir = img_dir
         self.web_dir = os.path.dirname(self.img_dir)
         self.doc = dominate.document(title=title)
+        self.file_name = file_name
         if refresh > 0:
             with self.doc.head:
                 meta(http_equiv="refresh", content=str(refresh))
@@ -58,7 +59,7 @@ class HTML:
                             p(title)
 
     def save(self):
-        html_file = f"{self.web_dir}/index.html"
+        html_file = f"{self.web_dir}/{self.file_name}.html"
         f = open(html_file, "wt", encoding='utf-8')
         f.write(self.doc.render())
         f.close()
