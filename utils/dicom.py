@@ -1,4 +1,5 @@
 import math
+import os
 from typing import List, Tuple
 
 import cv2
@@ -6,7 +7,7 @@ import numpy as np
 import pydicom
 import SimpleITK as sitk
 
-from utils.utils import str2datetime
+from utils.utils import str2datetime, BASE_FOLDER, LABELS
 
 
 # -----------------------------------------------------------#
@@ -172,6 +173,8 @@ DICOM_TAG = {
     0x00100010: "Patient Name",
     0x00100020: "Patient ID",
     0x00100040: "Patient Sex",
+    0x00101020: "Patient Size",
+    0x00101030: "Patient Weight",
     0x00080022: "Acquisition Date",
     0x00080080: "Institution Name",
     0x00080081: "Institution Adresss",
@@ -188,7 +191,6 @@ def get_patient_infomation(filename: str, dicom_tag: dict = DICOM_TAG):
         try:
             information[value] = file[key].value
         except:
-            print(f"{value} is not exist")
             information[value] = None
     return information
 
@@ -196,29 +198,27 @@ def get_patient_infomation(filename: str, dicom_tag: dict = DICOM_TAG):
 # -----------------------------------------------------------#
 #                      图像转换
 # -----------------------------------------------------------#
-def normalize_ct_hu(
+def ct2image(
     pixel_value: np.ndarray,
     window_center: float,
     window_width: float,
-    to_image: bool = False,
+    to_uint8: bool = False,
 ):
     window_min = window_center - window_width * 0.5
     window_max = window_center + window_width * 0.5
     np.clip(pixel_value, window_min, window_max, pixel_value)
-    value = (pixel_value - window_min) / window_width
-    if to_image:
-        value = (value * 255).astype(np.uint8)
-    return value
+    image = (pixel_value - window_min) / window_width
+    if to_uint8:
+        image = (image * 255).astype(np.uint8)
+    return image
 
 
-def normalize_pet_suv(
-    pixel_value: np.ndarray, SUVbw_max: float, to_image: bool = False
-):
-    np.clip(pixel_value, 0, SUVbw_max, pixel_value)
-    value = pixel_value / SUVbw_max
-    if to_image:
-        value = (value * 255).astype(np.uint8)
-    return value
+def suvbw2image(pixel_value: np.ndarray, suvbw_max: float, to_uint8: bool = False):
+    np.clip(pixel_value, 0, suvbw_max, pixel_value)
+    image = pixel_value / suvbw_max
+    if to_uint8:
+        image = (image * 255).astype(np.uint8)
+    return image
 
 
 # -----------------------------------------------------------#
@@ -438,3 +438,106 @@ def get_body(
     # 使用超大半径的闭操作，消除伪影
     ct_no_machine_max_closing = binary_morphological_closing(ct_no_machine_max, 20)
     return ct_no_machine_max_closing
+
+
+# ---------------------------------------------------#
+#                    数据预处理
+# ---------------------------------------------------#
+def data_preprocess(
+    image_no: str,
+    input_type: str,
+    input_shape: List[int],
+    to_label: dict,
+    eval: bool = False,
+):
+    # 读取图像
+    ct = sitk.ReadImage(os.path.join(BASE_FOLDER, f"{image_no}_CT.nii.gz"))
+    pet = sitk.ReadImage(os.path.join(BASE_FOLDER, f"{image_no}_SUVbw.nii.gz"))
+    label_body = sitk.ReadImage(
+        os.path.join(BASE_FOLDER, f"{image_no}_Label_Body.nii.gz")
+    )
+
+    # 获取图像大小
+    iw, ih, id = LABELS[image_no]["size"]
+    d, h, w = input_shape
+
+    scale = min(1.0 * w / iw, 1.0 * h / ih, 1.0 * d / id)
+    nw = int(iw * scale)
+    nh = int(ih * scale)
+    nd = int(id * scale)
+
+    # resample 到 新的大小去
+    resampled_ct = resameple_based_size(ct, [nw, nh, nd])
+    resampled_pet = resameple_based_size(pet, [nw, nh, nd])
+    resampled_body = resameple_based_size(label_body, [nw, nh, nd], True)
+
+    # 填充的大小
+    dx = (w - nw) // 2
+    dx_ = w - nw - dx
+    dy = (h - nh) // 2
+    dy_ = h - nh - dy
+    dz = (d - nd) // 2
+    dz_ = d - nd - dz
+
+    # 获取 array
+    resampled_ct_array = sitk.GetArrayFromImage(resampled_ct)
+    resampled_pet_array = sitk.GetArrayFromImage(resampled_pet)
+    resampled_body_array = sitk.GetArrayFromImage(resampled_body)
+
+    # 使用 body mask 进行一定的预处理
+    resampled_ct_array = (
+        resampled_ct_array * (resampled_body_array) + (1 - resampled_body_array) * -1000
+    )
+    resampled_pet_array = resampled_pet_array * resampled_body_array
+
+    # 进行 padding
+    ct_array = np.pad(
+        resampled_ct_array, ((dz, dz_), (dy, dy_), (dx, dx_)), constant_values=-1000
+    )
+    pet_array = np.pad(
+        resampled_pet_array, ((dz, dz_), (dy, dy_), (dx, dx_)), constant_values=0
+    )
+
+    # ------------------------------#
+    #   图像预处理
+    # ------------------------------#
+    # # 根据窗位和窗宽进行标准化
+    # ct_array = ct2image(ct_array, 300.0, 1500.0)
+    # # 将SUV值大于0
+    # pet_array[pet_array < 0.0] = 0.0
+
+    # ------------------------------#
+    #   获得真实框
+    # ------------------------------#
+    labels = LABELS[image_no]["labels"]
+    boxes = []
+    for label in labels:
+        if label["class_name"] in to_label:
+            boxes.append(label["bbox"] + [to_label[label["class_name"]]])
+    boxes = np.array(boxes)
+    if len(boxes) > 0 and not eval:
+        np.random.shuffle(boxes)
+        boxes[:, [0, 3]] = boxes[:, [0, 3]] * nw / iw + dx
+        boxes[:, [1, 4]] = boxes[:, [1, 4]] * nh / ih + dy
+        boxes[:, [2, 5]] = boxes[:, [2, 5]] * nd / id + dz
+        boxes[:, [3]][boxes[:, [3]] > w] = w
+        boxes[:, [4]][boxes[:, [4]] > h] = h
+        boxes[:, [5]][boxes[:, [5]] > d] = d
+        w = boxes[:, 3] - boxes[:, 0]
+        h = boxes[:, 4] - boxes[:, 1]
+        d = boxes[:, 5] - boxes[:, 2]
+        boxes = boxes[np.logical_and(np.logical_and(w > 1, h > 1), d > 1)]
+    # ------------------------------#
+    #   数据拼接
+    # ------------------------------#
+    ct_array = np.expand_dims(ct_array, 0)
+    pet_array = np.expand_dims(pet_array, 0)
+    if input_type == "petct":
+        image = np.concatenate([ct_array, pet_array], axis=0)
+    elif input_type == "pet":
+        image = pet_array
+    elif input_type == "ct":
+        image = ct_array
+    else:
+        raise Exception(f"not support {type}.")
+    return image_no, image.astype(np.float32), boxes

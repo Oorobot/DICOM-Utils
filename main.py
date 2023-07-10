@@ -8,12 +8,11 @@ import matplotlib
 import numpy as np
 import SimpleITK as sitk
 
-from utils.dicom import normalize_ct_hu, normalize_pet_suv
+from utils.dicom import ct2image, suvbw2image
 from utils.html import HTML
 
 RESULT_FILES = "./Files/FRI/result_files"
 RESULT_IMAGES = "./Files/FRI/result_images"
-LABELS = json.load(open("./Files/FRI/image_2mm.json"))
 GT2COLOR = {
     "infected": (0, 0, 1),  # 红色
     "uninfected": (0, 1, 0),  # 绿色
@@ -87,7 +86,7 @@ def save_3d_label(no, gts, dts):
 
 def args_parser():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--op", type=str, choices=['json', 'html'])
+    parser.add_argument("--op", type=str, choices=['json', 'html'], default='json')
     parser.add_argument("--result-file", type=str, default=None)
     parser.add_argument("--preffixes", type=str, nargs="+", default=None)
     parser.add_argument("--html-name", type=str, default="index")
@@ -170,8 +169,8 @@ if __name__ == '__main__':
             )
             ct_array = sitk.GetArrayFromImage(ct_image)
             suv_array = sitk.GetArrayFromImage(suv_image)
-            hu = normalize_ct_hu(ct_array, 300, 1500, True)
-            suvbw = normalize_pet_suv(suv_array, 2.5, True)
+            hu = ct2image(ct_array, 300, 1500, True)
+            suvbw = suvbw2image(suv_array, 2.5, True)
 
             for i, bbox in enumerate(result_images):
                 y = (int)((bbox[0] + bbox[1]) / 2)

@@ -11,9 +11,11 @@ from xpinyin import Pinyin
 # -----------------------------------------------------------#
 #                            常量
 # -----------------------------------------------------------#
-P = Pinyin()
+BASE_FOLDER = "./Files/FRI/image_2mm"
 OUTPUT_FOLDER = "./Files"
 COLORS = ["#63b2ee", "#76da91", "#f8cb7f"]
+LABELS = json.load(open("./Files/FRI/image_2mm.json"))
+P = Pinyin()
 
 
 # -----------------------------------------------------------#
@@ -125,18 +127,18 @@ def str2datetime(time: str) -> datetime:
 
 
 # ---------------------------------------------------#
-#  数据增强
+#               三维医学影像的数据增强
 # ---------------------------------------------------#
-def random_flip(ct_patch: np.ndarray, suv_patch: np.ndarray, boxes: np.ndarray):
-    axis = np.random.randint(0, 3)
-    ct_p = np.flip(ct_patch, 2 - axis)
-    suv_p = np.flip(suv_patch, 2 - axis)
-    axis_size = ct_patch.shape[2 - axis]
-    for box in boxes:
-        # box: [x1, y1, z1, x2, y2, z2, c]
-        # ct shape: [D, H, W]
-        box[axis], box[axis + 3] = axis_size - box[axis + 3], axis_size - box[axis]
-    return ct_p, suv_p, boxes
+def random_flip(image: np.ndarray, box: np.ndarray, axis=None):
+    # 选择翻转的轴 x, y, z
+    axis = np.random.randint(0, 3) if axis is None else axis
+    # image's shape [C, D, H, W]
+    image = np.flip(image, 3 - axis)
+    axis_size = image.shape[3 - axis]
+    # b's shape [x1, y1, z1, x2, y2, z2, c]
+    for b in box:
+        b[axis], b[axis + 3] = axis_size - b[axis + 3], axis_size - b[axis]
+    return image, box
 
 
 def random_rot90(ct_patch: np.ndarray, suv_patch: np.ndarray, boxes: list):
@@ -181,3 +183,68 @@ def rot90_3D_annotation(image_size, point1, point2, k, axes):
     point1[axes[0]], point1[axes[1]] = y1_, x1_
     point2[axes[0]], point2[axes[1]] = y2_, x2_
     return point1, point2
+
+
+def mixup(image1: np.ndarray, box1: np.ndarray, image2: np.ndarray, box2: np.ndarray):
+    image = image1 * 0.5 + image2 * 0.5
+    if len(box1) == 0:
+        box = box2
+    elif len(box2) == 0:
+        box = box1
+    else:
+        box = np.concatenate([box1, box2], axis=0)
+    return image, box
+
+
+def ricap(
+    image1: np.ndarray,
+    box1: np.ndarray,
+    image2: np.ndarray,
+    box2: np.ndarray,
+    axis=None,
+):
+    # 随机选择需要切的轴 x 或 z
+    axis = np.random.choice([1, 3], replace=False) if axis is None else axis
+    # 相应轴的大小
+    axis_size = image1.shape[axis]
+    min_offset = 0.4
+    # 随机的裁剪位置
+    crop_pos = np.random.randint(
+        int(axis_size * min_offset), int(axis_size * (1 - min_offset))
+    )
+    # 拼接图像
+    new_image = np.zeros_like(image1)  # shape: [2, D, H, W]
+    new_box = []
+    if axis == 1:  # z 轴
+        new_image[:, :crop_pos, :, :] = image1[:, :crop_pos, :, :]
+        new_image[:, crop_pos:, :, :] = image2[:, crop_pos:, :, :]
+        # 合并 box
+        for b in box1:
+            x1, y1, z1, x2, y2, z2, c = b
+            if z1 < crop_pos and z2 > crop_pos:
+                new_box.append([x1, y1, z1, x2, y2, crop_pos, c])
+            elif z2 <= crop_pos:
+                new_box.append(b)
+        for b in box2:
+            x1, y1, z1, x2, y2, z2, c = b
+            if z1 < crop_pos and z2 > crop_pos:
+                new_box.append([x1, y1, crop_pos, x2, y2, z2, c])
+            elif z1 >= crop_pos:
+                new_box.append(b)
+    elif axis == 3:  # x 轴
+        new_image[:, :, :, :crop_pos] = image1[:, :, :, :crop_pos]
+        new_image[:, :, :, crop_pos:] = image2[:, :, :, crop_pos:]
+        # 合并 box
+        for b in box1:
+            x1, y1, z1, x2, y2, z2, c = b
+            if x1 < crop_pos and x2 > crop_pos:
+                new_box.append([x1, y1, z1, crop_pos, y2, z2, c])
+            elif x2 <= crop_pos:
+                new_box.append(b)
+        for b in box2:
+            x1, y1, z1, x2, y2, z2, c = b
+            if x1 < crop_pos and x2 > crop_pos:
+                new_box.append([crop_pos, y1, z1, x2, y2, z2, c])
+            elif x1 >= crop_pos:
+                new_box.append(b)
+    return new_image, np.array(new_box)
