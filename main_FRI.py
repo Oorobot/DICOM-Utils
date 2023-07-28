@@ -1,6 +1,7 @@
 import json
 import os
 import zipfile
+import shutil
 from glob import glob
 
 import cv2
@@ -18,53 +19,154 @@ from utils.utils import LABELS, mixup, random_flip, ricap
 
 
 def main():
-    # excel
-    excel = pd.read_excel("Files/Data/PETCT-FRI/PET-FRI.xlsx", sheet_name="FRI-PETall")
-    # 验证集上的病人编号
-    val_nos = json.load(open("Files/FRI/dataset.json"))['fold 1']['val']
-    # 纳入研究的所有病人编号
-    total_nos = list(LABELS.keys())
+    # # excel
+    # excel = pd.read_excel("Files/Data/PETCT-FRI/PET-FRI.xlsx", sheet_name="FRI-PETall")
+    # # 验证集上的病人编号
+    # val_nos = json.load(open("Files/FRI/dataset.json"))["fold 1"]["val"]
+    # # 纳入研究的所有病人编号
+    # total_nos = list(LABELS.keys())
+    # total_nos_int = [int(no) for no in total_nos]
+    # total_patiens = excel.query("No_FRI in @total_nos_int")
 
-    total_nos_int = [int(no) for no in total_nos]
-    total_patiens = excel.query("No_FRI in @total_nos_int")
-    # 统计所有病人的年龄分布
-    ages = total_patiens[["Age"]].values
-    print(f"Age: {np.mean(ages):.1f}({np.min(ages)}-{np.max(ages)})")
+    # # 统计标注数据中的感染与非感染
+    # infected = 0
+    # uninfected = 0
+    # for no, value in LABELS.items():
+    #     for v in value["labels"]:
+    #         if v[-1] == "infected":
+    #             infected += 1
+    #         elif v[-1] == "uninfected":
+    #             uninfected += 1
+    # print(
+    #     f"Diagnose: infected={infected}({infected/(infected+uninfected):.1%}), uninfected={uninfected}({uninfected/(infected+uninfected):.1%})."
+    # )
 
-    # 统计所有病人的性别分布
-    sex_num = total_patiens.value_counts(subset=["Gender"])
-    print(sex_num)
+    # # 统计所有病人的年龄分布
+    # ages = total_patiens[["Age"]].values
+    # print(f"Age: {np.mean(ages):.1f}({np.min(ages)}-{np.max(ages)})")
 
-    # 统计所有病人的 body mass index
-    total_bmi = []
-    for no in total_nos:
-        files = glob(f"Files/Data/PETCT-FRI/NormalData/{no}/PET/*")
-        information = get_patient_infomation(files[0])
-        bmi = information["Patient Weight"] / (information["Patient Size"] ** 2)
-        total_bmi.append(bmi)
-    print(
-        f"BMI: {np.mean(total_bmi):.1f}({np.min(total_bmi):.1f}-{np.max(total_bmi):.1f})"
+    # # 统计所有病人的性别分布
+    # sex_num = total_patiens.value_counts(subset=["Gender"])
+    # print(sex_num)
+
+    # # 统计所有病人的 body mass index
+    # total_bmi = []
+    # for no in total_nos:
+    #     files = glob(f"Files/Data/PETCT-FRI/NormalData/{no}/PET/*")
+    #     information = get_patient_infomation(files[0])
+    #     bmi = information["Patient Weight"] / (information["Patient Size"] ** 2)
+    #     total_bmi.append(bmi)
+    # print(
+    #     f"BMI: {np.mean(total_bmi):.1f}({np.min(total_bmi):.1f}-{np.max(total_bmi):.1f})"
+    # )
+
+    # # 统计所有病人的细菌类别
+    # print(total_patiens.value_counts(subset=["Final_diagnosis"]))
+    # microbio_species = total_patiens[pd.isnull(total_patiens["Microbio_species"])]
+    # print(microbio_species.value_counts(subset=["Final_diagnosis"]))
+    # no_microbio = total_patiens[~pd.isnull(total_patiens["Microbio_species"])]
+    # print(no_microbio.value_counts(subset=["Final_diagnosis"]))
+
+    # # 导出验证集中病人的PETCT影像文件
+    # with zipfile.ZipFile('Files/FRI/Experiments/val.zip', 'w') as zip:
+    #     for no in val_nos:
+    #         for dir_name in ['CT', 'PET']:
+    #             current_dir = os.path.join(
+    #                 "Files", "Data", "PETCT-FRI", "NormalData", no, dir_name
+    #             )
+    #             zip_dir = os.path.join("NormalData", no, dir_name)
+    #             for filename in os.listdir(current_dir):
+    #                 zip.write(
+    #                     os.path.join(current_dir, filename),
+    #                     os.path.join(zip_dir, filename),
+    #                 )
+
+    # # 导出验证集中病人的查片时的影像文件
+    # if not os.path.exists("./tmp"):
+    #     os.makedirs("./tmp")
+    # with zipfile.ZipFile('Files/FRI/Experiments/val_image.zip', 'w') as zip:
+    #     for no in val_nos:
+    #         current_dir = os.path.join("Files", "Data", "PETCT-FRI", "NormalData", no)
+    #         zip_dir = os.path.join("NormalData", no)
+    #         for filename in os.listdir(current_dir):
+    #             if filename == 'CT' or filename == 'PET':
+    #                 continue
+    #             zip.write(
+    #                 os.path.join(current_dir, filename),
+    #                 os.path.join(zip_dir, filename),
+    #             )
+    #             # 转换dicom为jpg
+    #             image = sitk.ReadImage(os.path.join(current_dir, filename))
+    #             array = sitk.GetArrayFromImage(image)
+    #             name = os.path.splitext(filename)[0]
+    #             array = np.squeeze(array)
+    #             cv2.imwrite(f"./tmp/{name}.jpg", array[..., ::-1])
+    #             zip.write(
+    #                 f"./tmp/{name}.jpg",
+    #                 os.path.join(zip_dir, f"./tmp/{name}.jpg"),
+    #             )
+    # shutil.rmtree("./tmp")
+
+    # # 导出验证集上的病人编号、名字、检查日期
+    # val_nos_int = [int(no) for no in val_nos]
+    # patiens = excel.query("No_FRI in @val_nos_int")
+    # information = patiens[["No_FRI", "Name", "Date"]]
+    # information.to_excel("Files/FRI/Experiments/information.xlsx")
+
+    # ----------------------------------- #
+    #    统计医生在验证集上的诊断性能
+    # ----------------------------------- #
+    label = pd.read_excel(
+        r"Files\FRI\Experiments\validation_set_for_physician.xlsx",
+        sheet_name="Label",
+        skiprows=2,
     )
 
-    # 导出验证集中病人的PETCT影像文件
-    with zipfile.ZipFile('Files/FRI/Experiments/val.zip', 'w') as zip:
-        for no in val_nos:
-            for dir_name in ['CT', 'PET']:
-                current_dir = os.path.join(
-                    "Files", "Data", "PETCT-FRI", "NormalData", no, dir_name
-                )
-                zip_dir = os.path.join("NormalData", no, dir_name)
-                for filename in os.listdir(current_dir):
-                    zip.write(
-                        os.path.join(current_dir, filename),
-                        os.path.join(zip_dir, filename),
-                    )
+    def get_metric(_l, _p):
+        tp, fp, tn, fn = 0, 0, 0, 0
+        for i, (l, p) in enumerate(zip(_l, _p)):
+            n = 2 if i == 9 or i == 27 else 1
+            if l[6] == "感染" and p[6] == "感染":
+                tp += n
+            elif l[6] == "感染" and p[6] == "非感染":
+                fp += n
+            elif l[6] == "非感染" and p[6] == "非感染":
+                tn += n
+            else:
+                fn += n
+            if not pd.isna(p[9]):
+                if l[6] == "感染" and p[6] == "感染":
+                    tp += n
+                elif l[6] == "感染" and p[6] == "非感染":
+                    fp += n
+                elif l[6] == "非感染" and p[6] == "非感染":
+                    tn += n
+                else:
+                    fn += n
+        return tp, fp, tn, fn
 
-    # 导出验证集上的病人编号、名字、检查日期
-    val_nos_int = [int(no) for no in val_nos]
-    patiens = excel.query("No_FRI in @val_nos_int")
-    information = patiens[["No_FRI", "Name", "Date"]]
-    information.to_excel("Files/FRI/Experiments/information.xlsx")
+    physicians = ["S1", "S2", "S3", "J1", "J2", "J3"]
+    for physician in physicians:
+        print(physician, ":")
+        _p = pd.read_excel(
+            r"Files\FRI\Experiments\validation_set_for_physician.xlsx",
+            sheet_name=physician,
+            skiprows=2,
+        )
+        tp, fp, tn, fn = get_metric(label.values, _p.values)
+        total = tp + fp + tn + fn
+        specificity = tn / (tn + fp)
+        sensitivity = tp / (tp + fn)
+        f1 = 2 * tp / (2 * tp + fp + fn)
+        ppv = tp / (tp + fp)
+        npv = tn / (tn + fn)
+        print(
+            f"Confusion Matrix: tp = {tp:>2}, fp = {fp:>2}, tn = {tn:>2}, fn = {fn:>2}, total = {total:>2}"
+        )
+        print(f"Accuracy = {(tp+tn)/(tp+fp+tn+fn):.2%}")
+        print(
+            f"specificity = {specificity:.2%}, sensitivity = {sensitivity:.2%}, f1 = {f1:.4f}, npv = {npv:.2%}, ppv = {ppv:.2%}"
+        )
 
 
 def clip(dirname):
@@ -86,17 +188,17 @@ def visualize_data_augmentation(no1: str, no2: str):
 
     _, image1, box1 = data_preprocess(
         no1,
-        input_type='petct',
+        input_type="petct",
         input_shape=[384, 96, 160],
-        to_label={'infected': 0, 'uninfected': 1, 'bladder': 2},
+        to_label={"infected": 0, "uninfected": 1, "bladder": 2},
     )
     write(image1, box1, no1)
 
     _, image2, box2 = data_preprocess(
         no2,
-        input_type='petct',
+        input_type="petct",
         input_shape=[384, 96, 160],
-        to_label={'infected': 0, 'uninfected': 1, 'bladder': 2},
+        to_label={"infected": 0, "uninfected": 1, "bladder": 2},
     )
     write(image2, box2, no2)
 
@@ -108,17 +210,17 @@ def visualize_data_augmentation(no1: str, no2: str):
 
     # mixup
     image, box = mixup(image1, box1, image2, box2)
-    write(image, box, f'{no1}-{no2}-mixup')
+    write(image, box, f"{no1}-{no2}-mixup")
 
     # flip
     image1, box1 = random_flip(image1, box1, 0)
-    write(image1, box1, no1 + '-flip1')
+    write(image1, box1, no1 + "-flip1")
     image1, box1 = random_flip(image1, box1, 0)
     image1, box1 = random_flip(image1, box1, 1)
-    write(image1, box1, no1 + '-flip2')
+    write(image1, box1, no1 + "-flip2")
     image1, box1 = random_flip(image1, box1, 1)
     image1, box1 = random_flip(image1, box1, 2)
-    write(image1, box1, no1 + '-flip3')
+    write(image1, box1, no1 + "-flip3")
 
 
 def visualize_cropped_lesion_and_pet_mip():

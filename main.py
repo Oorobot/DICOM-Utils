@@ -86,19 +86,17 @@ def save_3d_label(no, gts, dts):
 
 def args_parser():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--op", type=str, choices=['json', 'html'], default='json')
+    parser.add_argument("--op", type=str, choices=["json", "html"], default="json")
     parser.add_argument("--result-file", type=str, default=None)
     parser.add_argument("--preffixes", type=str, nargs="+", default=None)
     parser.add_argument("--html-name", type=str, default="index")
     # 01_b6_n1_6
-    # 01_b6_n1_6_resnet18_d_pet
     # 01_b6_n1_6_resnet18_d_pet_mip_mixup0.2_result
-    # 01_b6_n1_6__f2_el1
     args = parser.parse_args()
     return args
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     args = args_parser()
     if args.op == "json":
         if args.result_file is None:
