@@ -124,25 +124,26 @@ def main():
 
     def get_metric(_l, _p):
         tp, fp, tn, fn = 0, 0, 0, 0
+        P, N = 0, 0
         for i, (l, p) in enumerate(zip(_l, _p)):
             n = 2 if i == 9 or i == 27 else 1
             if l[6] == "感染" and p[6] == "感染":
                 tp += n
             elif l[6] == "感染" and p[6] == "非感染":
-                fp += n
+                fn += n
             elif l[6] == "非感染" and p[6] == "非感染":
                 tn += n
-            else:
-                fn += n
+            elif l[6] == "非感染" and p[6] == "感染":
+                fp += n
             if not pd.isna(p[9]):
-                if l[6] == "感染" and p[6] == "感染":
+                if l[9] == "感染" and p[9] == "感染":
                     tp += n
-                elif l[6] == "感染" and p[6] == "非感染":
-                    fp += n
-                elif l[6] == "非感染" and p[6] == "非感染":
-                    tn += n
-                else:
+                elif l[9] == "感染" and p[9] == "非感染":
                     fn += n
+                elif l[9] == "非感染" and p[9] == "非感染":
+                    tn += n
+                elif l[9] == "非感染" and p[9] == "感染":
+                    fp += n
         return tp, fp, tn, fn
 
     physicians = ["S1", "S2", "S3", "J1", "J2", "J3"]
@@ -161,7 +162,7 @@ def main():
         ppv = tp / (tp + fp)
         npv = tn / (tn + fn)
         print(
-            f"Confusion Matrix: tp = {tp:>2}, fp = {fp:>2}, tn = {tn:>2}, fn = {fn:>2}, total = {total:>2}"
+            f"Confusion Matrix: tn = {tn:>2}, fp = {fp:>2}, fn = {fn:>2}, tp = {tp:>2}, total = {total:>2}"
         )
         print(f"Accuracy = {(tp+tn)/(tp+fp+tn+fn):.2%}")
         print(
