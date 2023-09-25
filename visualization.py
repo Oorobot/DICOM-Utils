@@ -68,13 +68,7 @@ class KeyPressStyle(vtk.vtkInteractorStyleTrackballCamera):
 
     def OnKeyPress(self, obj, event):
         print(f"Key {obj.GetInteractor().GetKeySym()} pressed")
-        camera = (
-            obj.GetInteractor()
-            .GetRenderWindow()
-            .GetRenderers()
-            .GetFirstRenderer()
-            .GetActiveCamera()
-        )
+        camera = obj.GetInteractor().GetRenderWindow().GetRenderers().GetFirstRenderer().GetActiveCamera()
         if obj.GetInteractor().GetKeySym() == "w":
             direction_of_projection = camera.GetDirectionOfProjection()
             position = camera.GetPosition()
@@ -149,7 +143,7 @@ class KeyPressStyle(vtk.vtkInteractorStyleTrackballCamera):
 # -----------------------------------------------------------#
 #                     标注框以及文字
 # -----------------------------------------------------------#
-def vtk_bounding_boxes(boxes, origin, spacing, texts, colors, size):
+def vtk_bounding_boxes(boxes, origin, spacing, texts, colors, size, up=True):
     origin = np.array(origin)
     spacing = np.array(spacing)
     actors = []
@@ -220,8 +214,8 @@ def vtk_bounding_boxes(boxes, origin, spacing, texts, colors, size):
         textMapper.SetInputConnection(vtk_text.GetOutputPort())
         textActor = vtkFollower()
         textActor.SetMapper(textMapper)
-        textActor.SetScale(size / 40, size / 40, size / 40)
-        textActor.AddPosition(x2, y2, z2)
+        textActor.SetScale(size / 30, size / 30, size / 30)
+        textActor.AddPosition(x2, y2, z2 if up else z1)
         textActor.GetProperty().SetColor(*color)
         actors.append(textActor)
     return actors
@@ -235,9 +229,7 @@ def ct_vtk_volume(ct_array: np.ndarray, origin: list, spacing: list, body_array=
     if body_array is not None:
         ct_array = ct_array * body_array + (1 - body_array) * -1000
 
-    ct_array = sitk.GetArrayFromImage(
-        sitk.GetImageFromArray(ct_array.astype(np.float32))
-    )
+    ct_array = sitk.GetArrayFromImage(sitk.GetImageFromArray(ct_array.astype(np.float32)))
 
     # 创建 vtk 图像
     vtk_image = vtkImageImportFromArray()
@@ -262,13 +254,14 @@ def ct_vtk_volume(ct_array: np.ndarray, origin: list, spacing: list, body_array=
     # 使用透明度转换函数，用于控制不同组织之间的透明度
     volume_scalar_opacity = vtkPiecewiseFunction()
     volume_scalar_opacity.AddPoint(0, 0.00)
-    # volume_scalar_opacity.AddPoint(500, 0.15)
-    # volume_scalar_opacity.AddPoint(1000, 0.15)
-    # volume_scalar_opacity.AddPoint(1150, 0.65)
-    volume_scalar_opacity.AddPoint(100, 0.15)
-    volume_scalar_opacity.AddPoint(500, 0.40)
+    volume_scalar_opacity.AddPoint(200, 0.25)
+    volume_scalar_opacity.AddPoint(500, 0.45)
     volume_scalar_opacity.AddPoint(1000, 0.65)
     volume_scalar_opacity.AddPoint(1150, 0.90)
+    # volume_scalar_opacity.AddPoint(100, 0.15)
+    # volume_scalar_opacity.AddPoint(500, 0.40)
+    # volume_scalar_opacity.AddPoint(1000, 0.65)
+    # volume_scalar_opacity.AddPoint(1150, 0.90)
 
     # 梯度不透明度函数用于降低体积“平坦”区域的不透明度，同时保持组织类型之间边界的不透明度。梯度是以强度在单位距离上的变化量来测量的
     volume_gradient_opacity = vtkPiecewiseFunction()
@@ -351,9 +344,7 @@ def suv_vtk_volume(suv_array: np.ndarray, origin: list, spacing: list):
 # -----------------------------------------------------------#
 #                          点云
 # -----------------------------------------------------------#
-def suv_point_cloud(
-    suv_array: np.ndarray, origin: list, spacing: list, body_array=None
-):
+def suv_point_cloud(suv_array: np.ndarray, origin: list, spacing: list, body_array=None):
     shape = suv_array.shape
     suv_image = suvbw2image(suv_array, 2.5, True)
 
@@ -405,36 +396,20 @@ def suv_point_cloud(
     polygonActor = vtkActor()
     polygonActor.SetMapper(polygonMapper)
     polygonActor.GetProperty().SetPointSize(1)
-    polygonActor.GetProperty().SetOpacity(0.5)
+    polygonActor.GetProperty().SetOpacity(0.35)
 
     return polygonActor
 
 
-def opt():
-    parser = argparse.ArgumentParser(description="PETCT 三维可视化")
-    parser.add_argument("--no", type=str, default="")
-    parser.add_argument("--dr-file", type=str, default="")
-    parser.add_argument("--vis", type=str, default="petct")
-    parser.add_argument("--no-gt", action="store_true")
-    parser.add_argument("--no-dr", action="store_true")
-    parser.add_argument("--only-body", action="store_true")
-    parser.add_argument("--ct-file", type=str, default=None)
-    parser.add_argument("--pet-file", type=str, default=None)
-    parser.add_argument("--bbox-file", type=str, default=None)
-    args = parser.parse_args()
-    return args
-
-
 def main():
     TEXTS = ["infected", "uninfected", "bladder", "lesion"]
-    # TEXTS = ["lesion", "lesion", "bladder", "lesion"]
-    GT_COLOR = [(255, 0, 0), (0, 255, 0), (0, 0, 255), (255, 0, 0)]
-    DT_COLOR = [(255, 0, 139), (255, 215, 0), (0, 115, 255), (255, 0, 139)]
+    GT_COLOR = [(255, 0, 0), (0, 255, 0), (0, 0, 255), (0, 255, 255)]
+    DT_COLOR = [(255, 0, 139), (255, 215, 0), (138, 43, 226), (50, 205, 50)]
     IMG_DIR = os.path.join("Files", "FRI", "image_2mm")
 
     parser = argparse.ArgumentParser(description="PETCT 三维可视化")
-    parser.add_argument("--no", type=str, default="")
-    parser.add_argument("--dr-file", type=str, default="")
+    parser.add_argument("-r", "--result_file", type=str, default="")
+    parser.add_argument('-n', "--no", type=str, default="")
     parser.add_argument("--vis", type=str, default="petct")
     parser.add_argument("--no-gt", action="store_true")
     parser.add_argument("--no-dr", action="store_true")
@@ -460,23 +435,21 @@ def main():
     interactor.SetInteractorStyle(KeyPressStyle())
 
     # 读取文件
-    if args.ct_file is None:
+    if args.no:
         ct_image = sitk.ReadImage(os.path.join(IMG_DIR, f"{args.no}_CT.nii.gz"))
-    else:
-        ct_image = sitk.ReadImage(args.ct_file)
-    if args.pet_file is None:
         pet_image = sitk.ReadImage(os.path.join(IMG_DIR, f"{args.no}_SUVbw.nii.gz"))
-    else:
+    elif args.ct_file is None:
+        ct_image = sitk.ReadImage(args.ct_file)
+    elif args.pet_file is None:
         pet_image = sitk.ReadImage(args.pet_file)
+
     ct_array = sitk.GetArrayFromImage(ct_image)
     pet_array = sitk.GetArrayFromImage(pet_image)
     ct_array = flipXY(ct_array)
     pet_array = flipXY(pet_array)
     body_array = None
     if args.only_body:
-        body_array = sitk.GetArrayFromImage(
-            sitk.ReadImage(os.path.join(IMG_DIR, f"{args.no}_Label_Body.nii.gz"))
-        )
+        body_array = sitk.GetArrayFromImage(sitk.ReadImage(os.path.join(IMG_DIR, f"{args.no}_Label_Body.nii.gz")))
         body_array = flipXY(body_array)
 
     # 渲染器的摄像头
@@ -522,10 +495,11 @@ def main():
         suv_pc = suv_point_cloud(pet_array, origin, spacing, body_array)
         renderer.AddActor(suv_pc)
 
+    result = json.load(open(args.result_file))
     if not args.no_gt:
         # 读取边界框
         gt_boxes, gt_texts, gt_colors = [], [], []
-        labels = LABELS[args.no]["labels"]
+        labels = result["ground_truth"][args.no]
         for label in labels:
             text, box = label["class_name"], label["bbox"]
             if text not in TEXTS:
@@ -536,9 +510,7 @@ def main():
             gt_colors.append(color)
         gt_boxes = flip_boxXY(gt_boxes, size)
         # 创建渲染的物体 gt 定位框
-        gt_actors = vtk_bounding_boxes(
-            gt_boxes, origin, spacing, gt_texts, gt_colors, max(size)
-        )
+        gt_actors = vtk_bounding_boxes(gt_boxes, origin, spacing, gt_texts, gt_colors, max(size))
         for i, actor in enumerate(gt_actors):
             renderer.AddActor(actor)
             if i % 2 == 1:
@@ -546,22 +518,19 @@ def main():
 
     if not args.no_dr:
         dr_boxes, dr_texts, dr_colors = [], [], []
-        dr = json.load(open(args.dr_file))
-        labels = dr[args.no]
+        labels = result["detection_results"][args.no]
         for label in labels:
             c, _, x1, y1, z1, x2, y2, z2 = (
                 label['class_name'],
                 label['confidence'],
-                label['bbox'],
+                *label['bbox'],
             )
             color = (np.array(DT_COLOR[TEXTS.index(c)]) / 255.0).tolist()
             dr_boxes.append([int(_) for _ in [x1, y1, z1, x2, y2, z2]])
             dr_texts.append(c)
             dr_colors.append(color)
         dr_boxes = flip_boxXY(dr_boxes, size)
-        dr_actors = vtk_bounding_boxes(
-            dr_boxes, origin, spacing, dr_texts, dr_colors, max(size)
-        )
+        dr_actors = vtk_bounding_boxes(dr_boxes, origin, spacing, dr_texts, dr_colors, max(size), False)
         # 创建渲染的物体 dr 定位框
         for i, actor in enumerate(dr_actors):
             renderer.AddActor(actor)

@@ -59,60 +59,33 @@ def get_SUVbw(pixel_value: np.ndarray, file: str) -> np.ndarray:
     \n 不适用于来源于 GE Medical 的 Dicom 文件。
     """
     image = pydicom.dcmread(file)
-    if (
-        "ATTN" in image.CorrectedImage
-        and "DECY" in image.CorrectedImage
-        and image.DecayCorrection == "START"
-    ):
+    if "ATTN" in image.CorrectedImage and "DECY" in image.CorrectedImage and image.DecayCorrection == "START":
         if image.Units == "BQML":
-            half_life = float(
-                image.RadiopharmaceuticalInformationSequence[0].RadionuclideHalfLife
-            )
-            if (
-                image.SeriesDate <= image.AcquisitionDate
-                and image.SeriesTime <= image.AcquisitionTime
-            ):
+            half_life = float(image.RadiopharmaceuticalInformationSequence[0].RadionuclideHalfLife)
+            if image.SeriesDate <= image.AcquisitionDate and image.SeriesTime <= image.AcquisitionTime:
                 scan_datetime = image.SeriesDate + image.SeriesTime
-            if (
-                "RadiopharmaceuticalStartDateTime"
-                in image.RadiopharmaceuticalInformationSequence[0]
-            ):
-                start_datetime = image.RadiopharmaceuticalInformationSequence[
-                    0
-                ].RadiopharmaceuticalStartDateTime
+            if "RadiopharmaceuticalStartDateTime" in image.RadiopharmaceuticalInformationSequence[0]:
+                start_datetime = image.RadiopharmaceuticalInformationSequence[0].RadiopharmaceuticalStartDateTime
             else:
-                start_datetime = (
-                    image.SeriesDate
-                    + image.RadiopharmaceuticalInformationSequence[
-                        0
-                    ].RadiopharmaceuticalStartTime
-                )
+                start_datetime = image.SeriesDate + image.RadiopharmaceuticalInformationSequence[0].RadiopharmaceuticalStartTime
 
-            decay_time = (
-                str2datetime(scan_datetime) - str2datetime(start_datetime)
-            ).total_seconds()
+            decay_time = (str2datetime(scan_datetime) - str2datetime(start_datetime)).total_seconds()
 
-            injected_dose = float(
-                image.RadiopharmaceuticalInformationSequence[0].RadionuclideTotalDose
-            )
+            injected_dose = float(image.RadiopharmaceuticalInformationSequence[0].RadionuclideTotalDose)
             decayed_dose = injected_dose * (2 ** (-decay_time / half_life))
             SUVbwScaleFactor = image.PatientWeight * 1000 / decayed_dose
         elif image.Units == "CNTS":
             SUVbwScaleFactor = image.get_item((0x7053, 0x1000))
         elif image.Units == "GML":
             SUVbwScaleFactor = 1.0
-    SUVbw = (
-        pixel_value * float(image.RescaleSlope) + float(image.RescaleIntercept)
-    ) * SUVbwScaleFactor
+    SUVbw = (pixel_value * float(image.RescaleSlope) + float(image.RescaleIntercept)) * SUVbwScaleFactor
     return SUVbw
 
 
 # -----------------------------------------------------------#
 #        计算来源于 GE Medical 的单张 PET(Dicom) 的 SUV
 # -----------------------------------------------------------#
-def get_SUV_in_GE(
-    pixel_value: np.ndarray, file: str
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+def get_SUV_in_GE(pixel_value: np.ndarray, file: str) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """来源: https://qibawiki.rsna.org/images/4/40/Calculation_of_SUVs_in_GE_Apps_v4_%282%29.doc。
     \n 仅适用于 GE medical
     \n 返回 SUVbw, SUVbsa, SUVlbm
@@ -120,42 +93,18 @@ def get_SUV_in_GE(
     image = pydicom.dcmread(file)
     try:
         bw = image.PatientWeight * 1000  # g
-        bsa = (
-            (image.PatientWeight**0.425)
-            * ((image.PatientSize * 100) ** 0.725)
-            * 0.007184
-            * 10000
-        )
+        bsa = (image.PatientWeight**0.425) * ((image.PatientSize * 100) ** 0.725) * 0.007184 * 10000
         lbm = (
-            (
-                1.10 * image.PatientWeight
-                - 120 * ((image.PatientWeight / (image.PatientSize * 100)) ** 2)
-            )
+            (1.10 * image.PatientWeight - 120 * ((image.PatientWeight / (image.PatientSize * 100)) ** 2))
             if image.PatientSex == "M"  # 性别为男
-            else (  # 性别为女
-                1.07 * image.PatientWeight
-                - 148 * ((image.PatientWeight / (image.PatientSize * 100)) ** 2)
-            )
+            else (1.07 * image.PatientWeight - 148 * ((image.PatientWeight / (image.PatientSize * 100)) ** 2))  # 性别为女
         )
         decay_time = (
             str2datetime(image.SeriesDate + image.SeriesTime)
-            - str2datetime(
-                image.SeriesDate
-                + image.RadiopharmaceuticalInformationSequence[
-                    0
-                ].RadiopharmaceuticalStartTime
-            )
+            - str2datetime(image.SeriesDate + image.RadiopharmaceuticalInformationSequence[0].RadiopharmaceuticalStartTime)
         ).total_seconds()
-        actual_activity = float(
-            image.RadiopharmaceuticalInformationSequence[0].RadionuclideTotalDose
-        ) * (
-            2
-            ** (
-                -(decay_time)
-                / float(
-                    image.RadiopharmaceuticalInformationSequence[0].RadionuclideHalfLife
-                )
-            )
+        actual_activity = float(image.RadiopharmaceuticalInformationSequence[0].RadionuclideTotalDose) * (
+            2 ** (-(decay_time) / float(image.RadiopharmaceuticalInformationSequence[0].RadionuclideHalfLife))
         )
     except:
         print("文件存在信息缺失")
@@ -209,7 +158,7 @@ def ct2image(
     np.clip(pixel_value, window_min, window_max, pixel_value)
     image = (pixel_value - window_min) / window_width
     if to_uint8:
-        image = (image * 255).astype(np.uint8)
+        image = ((image * 255.0).round()).astype(np.uint8)
     return image
 
 
@@ -224,9 +173,7 @@ def suvbw2image(pixel_value: np.ndarray, suvbw_max: float, to_uint8: bool = Fals
 # -----------------------------------------------------------#
 #                           重采样
 # -----------------------------------------------------------#
-def resample_based_target_image(
-    image: sitk.Image, target_image: sitk.Image, is_label: bool = False
-) -> sitk.Image:
+def resample_based_target_image(image: sitk.Image, target_image: sitk.Image, is_label: bool = False) -> sitk.Image:
     """
     将数据重采样的指定的图像一致
     image: sitk 读取的 image 数据
@@ -244,9 +191,7 @@ def resample_based_target_image(
     )
 
 
-def resample_based_spacing(
-    image: sitk.Image, output_spacing: list, is_label: bool = False
-):
+def resample_based_spacing(image: sitk.Image, output_spacing: list, is_label: bool = False):
     """
     将数据重采样的指定的 spacing 大小
     image: sitk 读取的 image 据
@@ -255,10 +200,7 @@ def resample_based_spacing(
     """
     input_size = image.GetSize()
     input_spacing = image.GetSpacing()
-    output_size = [
-        math.ceil(input_size[i] * input_spacing[i] / output_spacing[i])
-        for i in range(3)
-    ]
+    output_size = [math.ceil(input_size[i] * input_spacing[i] / output_spacing[i]) for i in range(3)]
     interpolator = sitk.sitkNearestNeighbor if is_label else sitk.sitkLinear
     return sitk.Resample(
         image,
@@ -280,9 +222,7 @@ def resameple_based_size(image: sitk.Image, output_size: list, is_label: bool = 
     """
     input_size = image.GetSize()
     input_spacing = image.GetSpacing()
-    output_spacing = [
-        input_size[i] * input_spacing[i] / output_size[i] for i in range(3)
-    ]
+    output_spacing = [input_size[i] * input_spacing[i] / output_size[i] for i in range(3)]
     interpolator = sitk.sitkNearestNeighbor if is_label else sitk.sitkLinear
     return sitk.Resample(
         image,
@@ -336,9 +276,7 @@ def get_3D_annotation(label_path: str) -> Tuple[List[int], List[List[int]]]:
             )
             for xy_contour in xy_contours:  # 遍历 xy 平面的标注
                 xy_contour = np.squeeze(xy_contour, axis=1)
-                assert (
-                    len(xy_contour) == 4
-                ), f"({xy_contour[0,0]}, {xy_contour[0,1]}, {i}) 处存在不规整的标注"
+                assert len(xy_contour) == 4, f"({xy_contour[0,0]}, {xy_contour[0,1]}, {i}) 处存在不规整的标注"
                 x1, y1 = xy_contour[0]
                 x2, y2 = xy_contour[2]
 
@@ -350,17 +288,13 @@ def get_3D_annotation(label_path: str) -> Tuple[List[int], List[List[int]]]:
                 )
                 for yz_contour in yz_contours:  # 遍历 yz 平面的标注
                     yz_contour = np.squeeze(yz_contour, axis=1)
-                    assert (
-                        len(yz_contour) == 4
-                    ), f"({x1}, {yz_contour[0,0]}, {yz_contour[0,1]}) 处存在不规整的标注"
+                    assert len(yz_contour) == 4, f"({x1}, {yz_contour[0,0]}, {yz_contour[0,1]}) 处存在不规整的标注"
                     y1_, z1 = yz_contour[0]
                     y2_, z2 = yz_contour[2]
 
                     if y1 == y1_ and y2 == y2_:
                         categories.append(category)
-                        annotations.append(
-                            [int(x1), int(y1), int(z1), int(x2), int(y2), int(z2)]
-                        )
+                        annotations.append([int(x1), int(y1), int(z1), int(x2), int(y2), int(z2)])
                         # 清除对应的立方体标注
                         category_array[z1 : z2 + 1, y1 : y2 + 1, x1 : x2 + 1] = 0
                         break
@@ -453,9 +387,7 @@ def data_preprocess(
     # 读取图像
     ct = sitk.ReadImage(os.path.join(BASE_FOLDER, f"{image_no}_CT.nii.gz"))
     pet = sitk.ReadImage(os.path.join(BASE_FOLDER, f"{image_no}_SUVbw.nii.gz"))
-    label_body = sitk.ReadImage(
-        os.path.join(BASE_FOLDER, f"{image_no}_Label_Body.nii.gz")
-    )
+    label_body = sitk.ReadImage(os.path.join(BASE_FOLDER, f"{image_no}_Label_Body.nii.gz"))
 
     # 获取图像大小
     iw, ih, id = LABELS[image_no]["size"]
@@ -485,18 +417,12 @@ def data_preprocess(
     resampled_body_array = sitk.GetArrayFromImage(resampled_body)
 
     # 使用 body mask 进行一定的预处理
-    resampled_ct_array = (
-        resampled_ct_array * (resampled_body_array) + (1 - resampled_body_array) * -1000
-    )
+    resampled_ct_array = resampled_ct_array * (resampled_body_array) + (1 - resampled_body_array) * -1000
     resampled_pet_array = resampled_pet_array * resampled_body_array
 
     # 进行 padding
-    ct_array = np.pad(
-        resampled_ct_array, ((dz, dz_), (dy, dy_), (dx, dx_)), constant_values=-1000
-    )
-    pet_array = np.pad(
-        resampled_pet_array, ((dz, dz_), (dy, dy_), (dx, dx_)), constant_values=0
-    )
+    ct_array = np.pad(resampled_ct_array, ((dz, dz_), (dy, dy_), (dx, dx_)), constant_values=-1000)
+    pet_array = np.pad(resampled_pet_array, ((dz, dz_), (dy, dy_), (dx, dx_)), constant_values=0)
 
     # ------------------------------#
     #   图像预处理
